@@ -44,6 +44,8 @@ extension (r: Rank) {
   // In the Hand mask, each rank is given 3 bits each, starting from the Least Significant Bit. The mask returned here
   //  only uses the least significant of the three (i.e. this is 0b001 shifted by some multiple of three)
   inline def handMask: Long = 1L << ((r.value - 2) * 3)
+  inline def -(offset: Int): Rank = Rank.fromOrdinal(r.ordinal + offset)
+  inline def +(offset: Int): Rank = Rank.fromOrdinal(r.ordinal - offset)
 }
 
 // Represent a Hand of 5 cards as a bitset such that identifying patterns is relatively simple. See `maskDebugString`

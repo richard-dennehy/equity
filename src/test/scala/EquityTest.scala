@@ -188,7 +188,7 @@ class EquityTest extends AnyFlatSpec with Matchers {
     )
   }
 
-  it should "return a guaranteed Ace To Five straight" in {
+  it should "return a guaranteed Ace To Five straight flush" in {
     val cardA = As
     val cardB = _3h
     val community = Vector(_2s, _3s, _4s, _5s, _9d)
@@ -260,6 +260,146 @@ class EquityTest extends AnyFlatSpec with Matchers {
       PossibleHand(Hand(_2s, _3s, _4s, _5s, _6s).rank, odds),
       PossibleHand(Hand(_2d, _3d, _4d, _5d, Ad).rank, odds),
       PossibleHand(Hand(_2s, _3s, _4s, _5s, As).rank, odds),
+    )
+  }
+
+  "possibleStraights" should "return an empty list when the 5 community cards and hole cards cannot form a straight" in {
+    val cardA = Ad
+    val cardB = _4s
+    val community = Vector(_2c, _6c, _8h, Th, Js)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe empty
+  }
+
+  it should "return an empty list when the 3 community cards and hole cards cannot form a straight with 2 more cards" in {
+    val cardA = Ad
+    val cardB = _4s
+    val community = Vector(_2c, _8h, Js)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe empty
+  }
+
+  it should "return an empty list when the community cards and hole cards form a straight flush" in {
+    val cardA = Ad
+    val cardB = Jd
+    val community = Vector(_8d, _9d, Td, Qd, Kd)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe empty
+  }
+
+  it should "return a single straight with 4 community cards and a hole card" in {
+    val cardA = Ad
+    val cardB = _4s
+    val community = Vector(_2c, Th, Jd, Qc, Ks)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe Vector(PossibleHand(Hand(Th, Jd, Qc, Ks, Ad).rank, 1.0))
+  }
+
+  it should "return a single straight with 3 community cards and a hole card" in {
+    val cardA = Ad
+    val cardB = Th
+    val community = Vector(_2c, _4s, Jd, Qc, Ks)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe Vector(PossibleHand(Hand(Th, Jd, Qc, Ks, Ad).rank, 1.0))
+  }
+
+  it should "return a guaranteed Ace to Five straight" in {
+    val cardA = Ad
+    val cardB = _4s
+    val community = Vector(_2c, _3h, _4d, _5c, Ks)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe Vector(PossibleHand(Hand(_2c, _3h, _4d, _5c, Ad).rank, 1.0))
+  }
+
+  it should "return an empty list when the community cards and hole cards form an Ace to Five straight flush" in {
+    val cardA = Ac
+    val cardB = _4s
+    val community = Vector(_2c, _3c, _4c, _5c, Ks)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe empty
+  }
+
+  it should "return multiple potential straights using 1 of 3 community cards and both hole cards" in {
+    val cardA = _6d
+    val cardB = _4s
+    val community = Vector(_2c, _3h, _7d)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe Vector(
+      PossibleHand(Hand(_4s, _5h, _6d, _7d, _8d).rank, (4f / 47) * (4f / 46)),
+      PossibleHand(Hand(_3h, _4s, _5h, _6d, _7d).rank, 4f / 47),
+      PossibleHand(Hand(_2c, _3h, _4s, _5h, _6d).rank, 4f / 47),
+      PossibleHand(Hand(_2c, _3h, _4s, _5h, Ad).rank, (4f / 47) * (4f / 46)),
+    )
+  }
+
+  it should "return multiple potential straights using 2 of 3 community cards and one hole card" in {
+    val cardA = Jd
+    val cardB = _3s
+    val community = Vector(_2c, _4h, _8d)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe Vector(
+      PossibleHand(Hand(_2c, _3s, _4h, _5s, _6s).rank, (4f / 47) * (4f / 46)),
+      PossibleHand(Hand(_2c, _3s, _4s, _5s, Ad).rank, (4f / 47) * (4f / 46)),
+    )
+  }
+
+  it should "return multiple potential straights when there are no community cards and both hole cards can appear in the same straight" in {
+    val cardA = _7s
+    val cardB = _3s
+    val community = Vector.empty
+    val drawn = community :+ cardA :+ cardB
+
+    val draw4Odds =
+      // draw 4 specific ranks of any suit
+      (4f / 50) * (4f / 49) * (4f / 48) * (4f / 47) -
+        // but not a flush
+        (1f / 50) * (1f / 49) * (1f / 48) * (1f / 47)
+
+    val draw3Odds =
+      (4f / 50) * (4f / 49) * (4f / 48) -
+        (1f / 50) * (1f / 49) * (1f / 48)
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe Vector(
+      PossibleHand(Hand(_7s, _8s, _9h, Ts, Js).rank, draw4Odds),
+      PossibleHand(Hand(_6s, _7s, _8s, _9h, Ts).rank, draw4Odds),
+      PossibleHand(Hand(_5s, _6s, _7s, _8s, _9h).rank, draw4Odds),
+      PossibleHand(Hand(_4h, _5s, _6s, _7s, _8s).rank, draw4Odds),
+      PossibleHand(Hand(_3s, _4h, _5s, _6s, _7s).rank, draw3Odds),
+      PossibleHand(Hand(_2c, _3s, _4h, _5s, _6s).rank, draw4Odds),
+      PossibleHand(Hand(_2c, _3s, _4s, _5s, Ad).rank, draw4Odds),
+    )
+  }
+
+  it should "return multiple potential straights when there are no community cards and the hole cards cannot appear in the same straight" in {
+    val cardA = _9s
+    val cardB = _3s
+    val community = Vector.empty
+    val drawn = community :+ cardA :+ cardB
+
+    val draw4Odds =
+      // draw 4 specific ranks of any suit
+      (4f / 50) * (4f / 49) * (4f / 48) * (4f / 47) -
+        // but not a flush
+        (1f / 50) * (1f / 49) * (1f / 48) * (1f / 47)
+
+    possibleStraights(cardA, cardB, community, drawn) shouldBe Vector(
+      PossibleHand(Hand(_9s, Tc, Js, Qs, Ks).rank, draw4Odds),
+      PossibleHand(Hand(_8s, _9s, Tc, Js, Qs).rank, draw4Odds),
+      PossibleHand(Hand(_7s, _8s, _9s, Tc, Js).rank, draw4Odds),
+      PossibleHand(Hand(_6s, _7s, _8s, _9s, Tc).rank, draw4Odds),
+      PossibleHand(Hand(_5c, _6s, _7s, _8s, _9s).rank, draw4Odds),
+      PossibleHand(Hand(_3s, _4h, _5c, _6s, _7s).rank, draw4Odds),
+      PossibleHand(Hand(_2c, _3s, _4h, _5c, _6s).rank, draw4Odds),
+      PossibleHand(Hand(_2c, _3s, _4s, _5c, Ad).rank, draw4Odds),
     )
   }
 }

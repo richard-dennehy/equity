@@ -50,6 +50,12 @@ import scala.collection.mutable.ArrayBuffer
 //  - the odds of each player tying or winning needs to sum to one
 //  - do all the winning hand probabilities sum to one - what does it mean if it doesn't?
 //    - it can be zero if both players can play a hand but will tie
+//
+// mad theorising:
+//  - given community cards 33334 and hole cards 5,6 vs 6,7, the 6,7 wins - but this has nothing to do with the four of a kind and everything to do with the existence of a kicker
+//  - this makes the idea of checking 4 of a kinds that only any given player can directly play troublesome
+//  - given hole cards 5,6 vs 6,7, in a High Card scenario, 6,7 always wins - it's therefore not necessary to check any particular High Card hands
+//  - if a player plays a 4 of a kind, the kicker is irrelevant because nobody else can tie on the quads
 
 def equity(heroHole: (Card, Card), villainHole: (Card, Card), community: Vector[Card], exclude: Vector[Card]): Equity =
   ???
@@ -121,79 +127,127 @@ def bestGuaranteedHand(cardA: Card, cardB: Card, community: Vector[Card]): Optio
 }
 
 def possibleStraights(cardA: Card, cardB: Card, community: Vector[Card], drawn: Vector[Card]): Vector[PossibleHand] = {
-  // check for Ace-to-5 straight for A and B
-  // for A and B; <min rank> to <max rank>; check draw odds of <min rank>, <min rank + 1>, ...
-  // sort by rank, exclude A/B and B/A duplicate
-  // <min rank> needs to be A/B - 5 with min of 2; max rank needs to be min of Ace - 5 or A/B
-  // given ordinals, probably more convenient to go high->low rather than low->high
-  // therefore, go from A/B+5 (max Ace) down to A/B (min 7)
+  assert(cardA.rank.value >= cardB.rank.value)
 
-  val aceLow = if (cardA.rank.value <= 5 || cardB.rank.value <= 5) {
-    // need to track the hand as well
-    // also need to track _other_ ace low hands, not just this one
-    Vector(
-      Rank.Ace,
-      Rank.Two,
-      Rank.Three,
-      Rank.Four,
-      Rank.Five
-    ).foldLeft(1.0) { case (odds, rank) =>
-      if (cardA.rank == rank || cardB.rank == rank || community.exists(_.rank == rank)) {
-        odds
-      } else {
-        odds * drawProbability(Some(rank), None, drawn)
+  // similarly to `possibleStraightFlushes`, but ignore suit, but don't ignore suit if it makes a flush
+  // if A.rank - B.rank < 5
+  //  for R going from A+5 (max Ace) down to B (min 6)
+  //   odds = 0
+  //   for all suit combinations such that at least one suit is different
+  //    odds += draw(R, suit0) * draw(R - 1, suit1) * draw(R - 2, suit2) * draw(R - 3, suit3) * draw(R - 4, suit4)
+  //   if odds != 0, possibleHands += (odds, R..R-4)
+  //  Ace->5
+  // odd implication that a set of suits doesn't need to be drawable when constructing possible hand since the suits are ignored anyway
+  // mad idea: deliberately try to get a flush, then subtract that from odds - checking against all suits will add the flush back in and cancel out
+
+  val possibleHands = ArrayBuffer.empty[PossibleHand]
+  val availableCards = community :+ cardA :+ cardB
+
+  inline def straights(max: Rank, min: Rank): Unit = {
+    var highCard = max
+    while (highCard.value >= min.value) {
+      var odds = 0f
+      var helper = DrawHelper(availableCards, drawn.toBuffer, 5 - community.size)
+
+      // exclude the chance of getting a straight flush
+      odds -= helper.draw(card(highCard, cardA.suit)) *
+        helper.draw(card(highCard - 1, cardA.suit)) *
+        helper.draw(card(highCard - 2, cardA.suit)) *
+        helper.draw(card(highCard - 3, cardA.suit)) *
+        helper.draw(card(highCard - 4, cardA.suit))
+
+      helper = DrawHelper(availableCards, drawn.toBuffer, 5 - community.size)
+
+      if (cardA.suit != cardB.suit) {
+        odds -= helper.draw(card(highCard, cardB.suit)) *
+          helper.draw(card(highCard - 1, cardB.suit)) *
+          helper.draw(card(highCard - 2, cardB.suit)) *
+          helper.draw(card(highCard - 3, cardB.suit)) *
+          helper.draw(card(highCard - 4, cardB.suit))
+
+        helper = DrawHelper(availableCards, drawn.toBuffer, 5 - community.size)
       }
+
+      odds +=
+        helper.drawRank(highCard) *
+          helper.drawRank(highCard - 1) *
+          helper.drawRank(highCard - 2) *
+          helper.drawRank(highCard - 3) *
+          helper.drawRank(highCard - 4)
+
+      if (odds > 0f) {
+        // slight strangeness - because of how ranking works, the suits are completely irrelevant here, so long as they don't flush
+        possibleHands += PossibleHand(
+          Hand(card(highCard, Suit.Spades), card(highCard - 1, Suit.Spades), card(highCard - 2, Suit.Spades), card(highCard - 3, Suit.Spades), card(highCard - 4, Suit.Diamonds)).rank,
+          odds
+        )
+      }
+
+      highCard -= 1
+    }
+  }
+
+  inline def aceToFiveStraight(): Unit = {
+    var odds = 0f
+    var helper = DrawHelper(availableCards, drawn.toBuffer, 5 - community.size)
+
+    // exclude the chance of getting a straight flush
+    odds -= helper.draw(card(Five, cardA.suit)) *
+      helper.draw(card(Four, cardA.suit)) *
+      helper.draw(card(Three, cardA.suit)) *
+      helper.draw(card(Two, cardA.suit)) *
+      helper.draw(card(Ace, cardA.suit))
+
+    helper = DrawHelper(availableCards, drawn.toBuffer, 5 - community.size)
+
+    if (cardA.suit != cardB.suit) {
+      odds -= helper.draw(card(Five, cardB.suit)) *
+        helper.draw(card(Four, cardB.suit)) *
+        helper.draw(card(Three, cardB.suit)) *
+        helper.draw(card(Two, cardB.suit)) *
+        helper.draw(card(Ace, cardB.suit))
+
+      helper = DrawHelper(availableCards, drawn.toBuffer, 5 - community.size)
+    }
+
+    odds += helper.drawRank(Five) *
+      helper.drawRank(Four) *
+      helper.drawRank(Three) *
+      helper.drawRank(Two) *
+      helper.drawRank(Ace)
+
+    if (odds > 0f) {
+      possibleHands += PossibleHand(Hand(card(Rank.Ace, Suit.Hearts), card(Five, Suit.Spades), card(Four, Suit.Spades), card(Three, Suit.Spades), card(Two, Suit.Spades)).rank, odds)
+    }
+  }
+
+  // both cards can appear in the same straight, so merge the iterators together
+  if (cardA.rank.value - cardB.rank.value < 5) {
+    // try and build a straight from R down to R-4, therefore R needs to stay bounded between Ace and 6
+    val max = if (cardA.rank.value > Rank.Ten.value) Rank.Ace else cardA.rank + 4
+    val min = if (cardB.rank.value < Rank.Six.value) Rank.Six else cardB.rank
+
+    straights(max, min)
+
+    if (cardB.rank.value <= 5) {
+      aceToFiveStraight()
     }
   } else {
-    0.0
+    val aMax = if (cardA.rank.value > Rank.Ten.value) Rank.Ace else cardA.rank + 4
+    val aMin = if (cardA.rank.value < Rank.Six.value) Rank.Six else cardA.rank
+
+    val bMax = if (cardB.rank.value > Rank.Ten.value) Rank.Ace else cardB.rank + 4
+    val bMin = if (cardB.rank.value < Rank.Six.value) Rank.Six else cardB.rank
+
+    straights(aMax, aMin)
+    straights(bMax, bMin)
+
+    if (cardA.rank == Rank.Ace || cardB.rank.value <= 5) {
+      aceToFiveStraight()
+    }
   }
 
-  ???
-}
-
-def possibleAceToFiveStraights(cardA: Card, cardB: Card, community: Vector[Card], drawn: Vector[Card]): Vector[PossibleHand] = {
-  if (cardA.rank.value > 6 && cardB.rank.value > 6) return Vector.empty
-
-  def odds(card: Card) = if (cardA == card || cardB == card || community.contains(card)) 1.0f else drawProbability(Some(card.rank), Some(card.suit), drawn)
-
-  val possibleHands = collection.mutable.ArrayBuffer.empty[PossibleHand]
-  // if A == Ace or community contains Ace, odds = 1
-  // if A != Ace, odds = drawProbability(Ace, None, drawn)
-  // if odds = 0, return empty
-  // if odds != 0, drawn += <any drawable Ace>
-  // if A or B == 5, odds *= 1
-  // else, odds *= drawProbability(5, None, drawn)
-  // if odds = 0, return empty
-  // if odds != 0, drawn += <any drawable 5>
-  // ...repeat down to 2
-  // need to account for draw limit
-  // this can't reliably check for flushes because e.g. an Ace is drawn but of the wrong suit
-
-  // all the possible ways to draw an Ace (including already having one)
-  //  times all the possible ways to draw a Two
-  //  times all the possible ways to draw a Three
-  //  times all the possible ways to draw a Four
-  //  times all the possible ways to draw a Five
-  for {
-    aceSuit <- Suit.values
-    twoSuit <- Suit.values
-    threeSuit <- Suit.values
-    fourSuit <- Suit.values
-    fiveSuit <- Suit.values
-  } yield {
-    val ace = card(Ace, aceSuit)
-    val two = card(Two, twoSuit)
-    val three = card(Three, threeSuit)
-    val four = card(Four, fourSuit)
-    val five = card(Five, fiveSuit)
-
-    // FIXME this is wrong - the odds change as cards get drawn
-    val handOdds = odds(ace) * odds(two) * odds(three) * odds(four) * odds(five)
-
-    if (handOdds != 0) possibleHands.addOne(PossibleHand(Hand(ace, two, three, four, five).rank, handOdds))
-  }
-
-  possibleHands.toVector.sortWith(_.hand > _.hand)
+  possibleHands.toVector
 }
 
 def possibleStraightFlushes(cardA: Card, cardB: Card, community: Vector[Card], drawn: Vector[Card]): Vector[PossibleHand] = {
@@ -241,10 +295,10 @@ def possibleStraightFlushes(cardA: Card, cardB: Card, community: Vector[Card], d
 
     val odds =
       helper.draw(card(Rank.Five, suit)) *
-      helper.draw(card(Rank.Four, suit)) *
-      helper.draw(card(Rank.Three, suit)) *
-      helper.draw(card(Rank.Two, suit)) *
-      helper.draw(card(Rank.Ace, suit))
+        helper.draw(card(Rank.Four, suit)) *
+        helper.draw(card(Rank.Three, suit)) *
+        helper.draw(card(Rank.Two, suit)) *
+        helper.draw(card(Rank.Ace, suit))
 
     if (odds != 0f) {
       possibleHands += PossibleHand(
@@ -289,6 +343,8 @@ def possibleStraightFlushes(cardA: Card, cardB: Card, community: Vector[Card], d
 }
 
 class DrawHelper(available: Vector[Card], drawn: mutable.Buffer[Card], var remainingDraws: Int) {
+  // TODO issue with this interface is sometimes it's necessary to ignore the already drawn cards e.g. pairs
+  //  potential fix: change the interface to essentially say "given these cards are definitely available and these cards definitely aren't, what's the probability of ending up with this hand of 5?"
   def draw(card: Card): Float = {
     if (available.contains(card)) return 1f
     if (remainingDraws == 0) return 0f
@@ -300,6 +356,45 @@ class DrawHelper(available: Vector[Card], drawn: mutable.Buffer[Card], var remai
     remainingDraws -= 1
 
     probability
+  }
+
+  def drawRank(rank: Rank): Float = {
+    if (available.exists(_.rank == rank)) return 1f
+    if (remainingDraws == 0) return 0f
+
+    // make a copy as this potentially gets mutated
+    val drawn_ = drawn.toVector
+
+    var totalProbability = 0f
+    var probability = drawProbability(Some(rank), Some(Suit.Spades), drawn_)
+    if (probability != 0.0) {
+      drawn += card(rank, Suit.Spades)
+    }
+    totalProbability += probability
+
+    probability = drawProbability(Some(rank), Some(Suit.Diamonds), drawn_)
+    if (probability != 0f && totalProbability == 0f) {
+      drawn += card(rank, Suit.Diamonds)
+    }
+    totalProbability += probability
+
+    probability = drawProbability(Some(rank), Some(Suit.Clubs), drawn_)
+    if (probability != 0f && totalProbability == 0f) {
+      drawn += card(rank, Suit.Clubs)
+    }
+    totalProbability += probability
+
+    probability = drawProbability(Some(rank), Some(Suit.Hearts), drawn_)
+    if (probability != 0f && totalProbability == 0f) {
+      drawn += card(rank, Suit.Hearts)
+    }
+    totalProbability += probability
+
+    if (totalProbability == 0f) return 0f
+
+    remainingDraws -= 1
+
+    totalProbability
   }
 }
 
