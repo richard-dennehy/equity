@@ -111,7 +111,7 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
                               card(fifth, fifthSuit),
                             )
 
-                            hand.category shouldBe HighCard.mask | (highCard.mask + second.mask + third.mask + fourth.mask + fifth.mask)
+                            hand.category shouldBe HighCard.mask | (highCard.handMask + second.handMask + third.handMask + fourth.handMask + fifth.handMask)
                             count += 1
 
                             hand.category should be <= prevHand.category
@@ -286,7 +286,7 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
                     card(lowCard, fifthSuit),
                   )
 
-                  hand.category shouldBe Straight.mask | (highCard.mask + (highCard - 1).mask + (highCard - 2).mask + (highCard - 3).mask + (if (highCard == Five) 0 else lowCard.mask))
+                  hand.category shouldBe Straight.mask | (highCard.handMask + (highCard - 1).handMask + (highCard - 2).handMask + (highCard - 3).handMask + (if (highCard == Five) 0 else lowCard.handMask))
                   count += 1
 
                   hand.category should be <= prevHand.category
@@ -330,7 +330,7 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
                     card(fifth, suit),
                   )
 
-                  hand.category shouldBe Flush.mask | (highCard.mask + second.mask + third.mask + fourth.mask + fifth.mask)
+                  hand.category shouldBe Flush.mask | (highCard.handMask + second.handMask + third.handMask + fourth.handMask + fifth.handMask)
                   count += 1
 
                   hand.category should be <= prevHand.category
@@ -433,7 +433,7 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
           card(lowCard, suit),
         )
 
-        hand.category shouldBe StraightFlush.mask | (highCard.mask + (highCard - 1).mask + (highCard - 2).mask + (highCard - 3).mask + (if (highCard == Five) 0 else lowCard.mask))
+        hand.category shouldBe StraightFlush.mask | (highCard.handMask + (highCard - 1).handMask + (highCard - 2).handMask + (highCard - 3).handMask + (if (highCard == Five) 0 else lowCard.handMask))
         count += 1
 
         hand.category should be <= prevHand.category
