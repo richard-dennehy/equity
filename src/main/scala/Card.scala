@@ -3,6 +3,7 @@ import Category.{Flush, FourOfAKind, FullHouse, HighCard, OnePair, Straight, Str
 opaque type Card = (Rank, Suit)
 
 def card(rank: Rank, suit: Suit): Card = (rank, suit)
+def card(rank: Int, suit: Suit): Card = (Rank.fromValue(rank), suit)
 
 extension (c: Card) {
   def rank: Rank = c._1
@@ -19,7 +20,6 @@ extension (s: Suit) {
 }
 
 // A named card Rank ordered from highest value to lowest value
-//  TODO the value doesn't seem to be particularly useful tbh
 enum Rank(val value: Int) {
   case Ace extends Rank(14)
   case King extends Rank(13)
@@ -34,6 +34,10 @@ enum Rank(val value: Int) {
   case Four extends Rank(4)
   case Three extends Rank(3)
   case Two extends Rank(2)
+}
+
+object Rank {
+  def fromValue(value: Int): Rank = Rank.fromOrdinal(14 - value)
 }
 
 extension (r: Rank) {
@@ -59,16 +63,18 @@ object Hand {
   }
 }
 
+type RankedHand = Long
+
 extension (hand: Hand) {
   def debugString: String = maskDebugString(hand)
 
   // Return a numeric value such that for any two Hands A and B:
-  //  - if A is a better hand than B, A.category > B.category
-  //  - if A is an equivalent hand to B, A.category == B.category
-  //  - if A is a worse hand than B, A.category < B.category
+  //  - if A is a better hand than B, A.rank > B.rank
+  //  - if A is an equivalent hand to B, A.rank == B.rank
+  //  - if A is a worse hand than B, A.rank < B.rank
   //
   // Other than respecting the ordering above, this value is meaningless - use `maskDebugString` to decode it if necessary
-  def category: Long = {
+  def rank: RankedHand = {
     inline def toOffset(shift: Int): Int = shift / 3
     inline def toPairMask(shift: Int): Long = 1L << (shift / 3 + 13)
     inline def toTripMask(shift: Int): Long = 1L << (shift / 3 + 26)
