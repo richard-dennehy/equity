@@ -402,4 +402,95 @@ class EquityTest extends AnyFlatSpec with Matchers {
       PossibleHand(Hand(_2c, _3s, _4s, _5c, Ad).rank, draw4Odds),
     )
   }
+
+  "possibleFourOfAKinds" should "return an empty list when there are 5 community cards and no 4 of a kinds are possible" in {
+    val cardA = Ac
+    val cardB = _4s
+    val community = Vector(_2c, _3c, _4c, _5c, Ks)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleFourOfAKinds(cardA, cardB, community, drawn) shouldBe empty
+  }
+
+  it should "return an empty list when the community cards contain a four of a kind" in {
+    val cardA = Ac
+    val cardB = _4s
+    val community = Vector(_2s, _2d, _2c, _2h, Ks)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleFourOfAKinds(cardA, cardB, community, drawn) shouldBe empty
+  }
+
+  it should "return an empty list when there are 3 community cards but no pairs with hole cards" in {
+    val cardA = Ac
+    val cardB = _6s
+    val community = Vector(_2c, _3c, _4c)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleFourOfAKinds(cardA, cardB, community, drawn) shouldBe empty
+  }
+
+  it should "return a guaranteed four of a kind" in {
+    val cardA = As
+    val cardB = Ad
+    val community = Vector(_2c, _3c, _4c, Ac, Ah)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleFourOfAKinds(cardA, cardB, community, drawn) shouldBe Vector(PossibleHand(Hand(As, Ad, Ac, Ah, Ks).rank, 1f))
+  }
+
+  it should "return a potential four of a kind when 2 of 3 community cards and a hole card have the same rank" in {
+    val cardA = Ac
+    val cardB = _6s
+    val community = Vector(_2c, Ah, As)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleFourOfAKinds(cardA, cardB, community, drawn) shouldBe Vector(PossibleHand(Hand(As, Ad, Ac, Ah, Ks).rank, 1f / 47))
+  }
+
+  it should "return 2 potential four of a kinds when there are 3 community cards and two pairs with the hole cards" in {
+    val cardA = Ac
+    val cardB = _6s
+    val community = Vector(_6c, Ah, As)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleFourOfAKinds(cardA, cardB, community, drawn) shouldBe Vector(
+      PossibleHand(Hand(As, Ad, Ac, Ah, Ks).rank, 1f / 47),
+      PossibleHand(Hand(_6s, _6d, _6c, _6h, As).rank, (1f / 47) * (1f / 46)),
+    )
+  }
+
+  it should "return a potential four of a kind when 1 of 3 community cards has the same rank as both hole cards" in {
+    val cardA = As
+    val cardB = Ad
+    val community = Vector(_6c, Th, Ac)
+    val drawn = community :+ cardA :+ cardB
+
+    possibleFourOfAKinds(cardA, cardB, community, drawn) shouldBe Vector(
+      PossibleHand(Hand(As, Ad, Ac, Ah, Ks).rank, 1f / 47),
+    )
+  }
+
+  it should "return a potential four of a kind when there are no community cards and the hole cards are a pair" in {
+    val cardA = As
+    val cardB = Ad
+    val community = Vector.empty
+    val drawn = community :+ cardA :+ cardB
+
+    possibleFourOfAKinds(cardA, cardB, community, drawn) shouldBe Vector(
+      PossibleHand(Hand(As, Ad, Ac, Ah, Ks).rank, (1f / 50) * (1f / 49)),
+    )
+  }
+
+  it should "return 2 potential four of a kinds when there are no community cards and the hole cards have different ranks" in {
+    val cardA = As
+    val cardB = Kd
+    val community = Vector.empty
+    val drawn = community :+ cardA :+ cardB
+
+    possibleFourOfAKinds(cardA, cardB, community, drawn) shouldBe Vector(
+      PossibleHand(Hand(As, Ad, Ac, Ah, Ks).rank, (1f / 50) * (1f / 49) * (1f / 48)),
+      PossibleHand(Hand(Ks, Kd, Kc, Kh, As).rank, (1f / 50) * (1f / 49) * (1f / 48)),
+    )
+  }
 }

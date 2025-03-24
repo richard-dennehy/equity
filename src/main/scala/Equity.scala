@@ -342,6 +342,63 @@ def possibleStraightFlushes(cardA: Card, cardB: Card, community: Vector[Card], d
   possibleHands.toVector
 }
 
+def possibleFourOfAKinds(cardA: Card, cardB: Card, community: Vector[Card], drawn: Vector[Card]): Vector[PossibleHand] = {
+  val possibleHands = ArrayBuffer.empty[PossibleHand]
+
+  var drawHelper = DrawHelper(community :+ cardA :+ cardB, drawn.toBuffer, 5 - community.size)
+  val fourOfAKindAOdds =
+    drawHelper.draw(card(cardA.rank, Suit.Spades)) *
+      drawHelper.draw(card(cardA.rank, Suit.Diamonds)) *
+      drawHelper.draw(card(cardA.rank, Suit.Clubs)) *
+      drawHelper.draw(card(cardA.rank, Suit.Hearts))
+
+  if (fourOfAKindAOdds != 0f) {
+    // peculiarity: there's no reason to care about the kicker because there's no way to get conflicting four of a kinds like this,
+    //  so just shove any other card into the hand
+    val kicker = if (cardA.rank == Rank.Ace) Rank.King else Rank.Ace
+
+    possibleHands += PossibleHand(
+      Hand(
+        card(cardA.rank, Suit.Spades),
+        card(cardA.rank, Suit.Diamonds),
+        card(cardA.rank, Suit.Clubs),
+        card(cardA.rank, Suit.Hearts),
+        card(kicker, Suit.Spades)
+      ).rank,
+      fourOfAKindAOdds
+    )
+  }
+
+  if (cardA.rank != cardB.rank) {
+    drawHelper = DrawHelper(community :+ cardA :+ cardB, drawn.toBuffer, 5 - community.size)
+
+    val fourOfAKindBOdds =
+      drawHelper.draw(card(cardB.rank, Suit.Spades)) *
+        drawHelper.draw(card(cardB.rank, Suit.Diamonds)) *
+        drawHelper.draw(card(cardB.rank, Suit.Clubs)) *
+        drawHelper.draw(card(cardB.rank, Suit.Hearts))
+
+    if (fourOfAKindBOdds != 0f) {
+      // peculiarity: there's no reason to care about the kicker because there's no way to get conflicting four of a kinds like this,
+      //  so just shove any other card into the hand
+      val kicker = if (cardB.rank == Rank.Ace) Rank.King else Rank.Ace
+
+      possibleHands += PossibleHand(
+        Hand(
+          card(cardB.rank, Suit.Spades),
+          card(cardB.rank, Suit.Diamonds),
+          card(cardB.rank, Suit.Clubs),
+          card(cardB.rank, Suit.Hearts),
+          card(kicker, Suit.Spades)
+        ).rank,
+        fourOfAKindBOdds
+      )
+    }
+  }
+
+  possibleHands.toVector
+}
+
 class DrawHelper(available: Vector[Card], drawn: mutable.Buffer[Card], var remainingDraws: Int) {
   // TODO issue with this interface is sometimes it's necessary to ignore the already drawn cards e.g. pairs
   //  potential fix: change the interface to essentially say "given these cards are definitely available and these cards definitely aren't, what's the probability of ending up with this hand of 5?"
