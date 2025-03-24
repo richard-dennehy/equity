@@ -1,18 +1,17 @@
 import Category.{Flush, FourOfAKind, FullHouse, HighCard, OnePair, Straight, StraightFlush, ThreeOfAKind, TwoPairs}
 import Rank.*
 import Suit.*
+import org.scalatest.AppendedClues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.annotation.targetName
 
-class HandTest extends AnyFlatSpec with Matchers {
-  "hand" should "be ordered" in {
-    Hand(As, _2c, _5d, Qh, Ts) shouldBe(As, Qh, Ts, _5d, _2c)
-  }
-
-  it should "not allow duplicates" in {
-    assertThrows[IllegalArgumentException](Hand(As, As, _2c, _5d, Qh))
+class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
+  "hand" should "have a vaguely sane representation" in {
+    Hand(As, _2c, _5d, Qh, Ts).debugString shouldBe
+      """sdch_____________________AAAKKKQQQJJJTTT999888777666555444333222
+        |1111000000000000000000000001000001000001000000000000001000000001""".stripMargin
   }
 
   it should "compare hands properly" in {
@@ -73,8 +72,8 @@ class HandTest extends AnyFlatSpec with Matchers {
     )
 
     allCategories.sliding(2).foreach { hands =>
-      hands.head should be < hands(1)
-      hands(1) should be > hands.head
+      Hand.given_Ordering_Hand.lt(hands.head, hands(1)) shouldBe true withClue s"\n${hands.head.debugString}\n${hands(1).debugString}"
+      Hand.given_Ordering_Hand.gt(hands(1), hands.head) shouldBe true
     }
   }
 
