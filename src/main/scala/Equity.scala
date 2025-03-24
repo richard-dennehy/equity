@@ -504,3 +504,136 @@ case class Equity(win: Float, draw: Float)
 // list each distinct community hand with odds - upper bound ~7400
 // for each potential community hand, calculate best hand for each player and find outcome
 // NOTE this doesn't quite work because the community cards don't know which suits matter and which don't
+
+// difficulty of working from each player's perspective: the odds of playing hands aren't independent - if P1 plays 4444K, P2 has a 100% chance of playing some of those cards
+// therefore, the problem seems to be:
+//  - given N cards drawn, and M community cards, calculate all the potential distinct community hands, and figure out which player wins (or none)
+//  - suits matter for some hands, but not others (e.g. nobody can flush from a 4 of a kind)
+//  - more importantly; nobody _wants_ to flush from 4 of a kind, even if they could
+
+// just return the count for now - this ultimately needs to take all the player hands and drive the equity calculation
+def possibleCommunityCards(current: Vector[Card], drawn: Vector[Card]): Int = {
+  var iterations = 0
+
+  if (current.size == 5) {
+    // only one possible hand
+    iterations += 1
+  } else {
+    var rank5 = Rank.Ace.value
+    var suit5 = 0
+
+    while (rank5 >= 2) {
+      val card5 = card(Rank.fromValue(rank5), Suit.fromOrdinal(suit5))
+      if (drawProbability(Some(card5.rank), Some(card5.suit), drawn) != 0f) {
+        if (current.size <= 3) {
+          var rank4 = rank5
+          var suit4 = suit5 + 1
+
+          // given the loop goes <R>s, <R>d, <R>c, <R>h, if outer suit is hearts, need to go to next rank, starting from Spades again
+          if (suit4 >= 4) {
+            rank4 -= 1
+            suit4 = 0
+          }
+
+          while (rank4 >= 2) {
+            val card4 = card(Rank.fromValue(rank4), Suit.fromOrdinal(suit4))
+
+            if (drawProbability(Some(card4.rank), Some(card4.suit), drawn :+ card5) != 0f) {
+              if (current.size < 3) {
+                var rank3 = rank4
+                var suit3 = suit4 + 1
+
+                if (suit3 >= 4) {
+                  rank3 -= 1
+                  suit3 = 0
+                }
+
+                while (rank3 >= 2) {
+                  val card3 = card(Rank.fromValue(rank3), Suit.fromOrdinal(suit3))
+                  if (drawProbability(Some(card3.rank), Some(card3.suit), drawn :+ card5 :+ card4) != 0f) {
+                    // assume we're drawing an entire flop (that is, don't check whether we have one or two community cards, just draw three)
+                    var rank2 = rank3
+                    var suit2 = suit3 + 1
+
+                    if (suit2 >= 4) {
+                      rank2 -= 1
+                      suit2 = 0
+                    }
+
+                    while (rank2 >= 2) {
+                      val card2 = card(Rank.fromValue(rank2), Suit.fromOrdinal(suit2))
+                      if (drawProbability(Some(card2.rank), Some(card2.suit), drawn :+ card5 :+ card4 :+ card3) != 0f) {
+                        var rank1 = rank2
+                        var suit1 = suit2 + 1
+
+                        if (suit1 >= 4) {
+                          rank1 -= 1
+                          suit1 = 0
+                        }
+
+                        while (rank1 >= 2) {
+                          val card1 = card(Rank.fromValue(rank1), Suit.fromOrdinal(suit1))
+                          if (drawProbability(Some(card1.rank), Some(card1.suit), drawn :+ card5 :+ card4 :+ card3 :+ card2) != 0f) {
+                            // TODO hand
+                            iterations += 1
+                          }
+
+                          suit1 = suit1 + 1
+
+                          if (suit1 >= 4) {
+                            rank1 -= 1
+                            suit1 = 0
+                          }
+                        }
+                      }
+
+                      suit2 = suit2 + 1
+                      if (suit2 >= 4) {
+                        rank2 -= 1
+                        suit2 = 0
+                      }
+                    }
+                  }
+
+                  suit3 = suit3 + 1
+                  if (suit3 >= 4) {
+                    rank3 -= 1
+                    suit3 = 0
+                  }
+                }
+              } else {
+                // TODO make hand
+                iterations += 1
+              }
+            }
+
+            suit4 = suit4 + 1
+            if (suit4 >= 4) {
+              rank4 -= 1
+              suit4 = 0
+            }
+          }
+        } else {
+          // TODO actually use the card
+          iterations += 1
+        }
+      }
+
+      suit5 = suit5 + 1
+      if (suit5 >= 4) {
+        rank5 -= 1
+        suit5 = 0
+      }
+    }
+  }
+  // need to be able to generate AAAA2 and A2222 - preferably avoid trying AAAAA; definitely don't generate AAAA2 _and_ 2AAAA
+  // fill from the right, not the left
+  // for either community card 5 _or_ Ace down to 2 in <Spades, Diamonds, Clubs, Hearts> as R
+  //  for either community card 4 _or_ R down to 2 in <Spades, Diamonds, Clubs, Hearts>
+  //   for either community card 3 _or_ R down to 2 in <Spades, Diamonds, Clubs, Hearts>
+  //    for either community card 2 _or_ R down to 2 in <Spades, Diamonds, Clubs, Hearts>
+  //     for either community card 5 _or_ R down to 2 in <Spades, Diamonds, Clubs, Hearts>
+  //      create community hand; give win to best player hand (or tie)
+
+  iterations
+}

@@ -493,4 +493,24 @@ class EquityTest extends AnyFlatSpec with Matchers {
       PossibleHand(Hand(Ks, Kd, Kc, Kh, As).rank, (1f / 50) * (1f / 49) * (1f / 48)),
     )
   }
+
+  "possibleCommunityHands" should "do a thing" in {
+    possibleCommunityCards(Vector.empty, Vector.empty) shouldBe 2598960 // == 52c5
+  }
+
+  it should "do a different thing when some cards have been dealt" in {
+    possibleCommunityCards(Vector.empty, Vector(_2s, _4d, _6c, _8h)) shouldBe 1712304 // == 48c5
+  }
+
+  it should "return 1 when all 5 community cards have been dealt" in {
+    possibleCommunityCards(Vector(Ts, Js, Qs, Ks, As), Vector.empty) shouldBe 1
+  }
+
+  it should "do stuff when the flop has been dealt" in {
+    possibleCommunityCards(Vector(Ts, Js, Qs), Vector(_2s, _4d, _6c, _8h, Ts, Js, Qs)) shouldBe 990 // == 45c2
+  }
+
+  it should "do stuff when the river has been dealt" in {
+    possibleCommunityCards(Vector(Ts, Js, Qs, Ks), Vector(_2s, _4d, _6c, _8h, Ts, Js, Qs, Ks)) shouldBe 44
+  }
 }
