@@ -67,52 +67,16 @@ object Hand {
 
     suitMask | rankMask
   }
-
-  given Ordering[Hand] = (h: Hand, other: Hand) => {
-    (h.category, other.category) match {
-      case (StraightFlush(aH), StraightFlush(bH)) =>
-        aH.compare(bH)
-      case (FourOfAKind(aQ, aK), FourOfAKind(bQ, bK)) =>
-        aQ.compare(bQ) << 1 + aK.compare(bK)
-      case (FullHouse(aT, aP), FullHouse(bT, bP)) =>
-        aT.compare(bT) << 1 + aP.compare(bP)
-      case (Flush(aK0, aK1, aK2, aK3, aK4), Flush(bK0, bK1, bK2, bK3, bK4)) =>
-        aK0.compare(bK0) << 4 +
-          aK1.compare(bK1) << 3 +
-          aK2.compare(bK2) << 2 +
-          aK3.compare(bK3) << 1 +
-          aK4.compare(bK4)
-      case (Straight(aH), Straight(bH)) =>
-        aH.compare(bH)
-      case (ThreeOfAKind(aT, aK0, aK1), ThreeOfAKind(bT, bK0, bK1)) =>
-        aT.compare(bT) << 2 +
-          aK0.compare(bK0) << 1 +
-          aK1.compare(bK1)
-      case (TwoPairs(aP0, aP1, aK), TwoPairs(bP0, bP1, bK)) =>
-        aP0.compare(bP0) << 2 +
-          aP1.compare(bP1) << 1 +
-          aK.compare(bK)
-      case (OnePair(aP, aK0, aK1, aK2), OnePair(bP, bK0, bK1, bK2)) =>
-        aP.compare(bP) << 3 +
-          aK0.compare(bK0) << 2 +
-          aK1.compare(bK1) << 1 +
-          aK2.compare(bK2)
-      case (HighCard(aK0, aK1, aK2, aK3, aK4), HighCard(bK0, bK1, bK2, bK3, bK4)) =>
-        aK0.compare(bK0) << 4 +
-          aK1.compare(bK1) << 3 +
-          aK2.compare(bK2) << 2 +
-          aK3.compare(bK3) << 1 +
-          aK4.compare(bK4)
-      case (aCat, bCat) =>
-        aCat.compare(bCat)
-    }
-  }
 }
 
 extension (h: Hand) {
   def debugString: String = maskDebugString(h)
 
-  def category: Category = {
+  def category: Long = {
+    inline def shiftToRank(shift: Int): Int = (shift / 3) + 2
+
+    inline def rankToShift(rank: Int): Int = (rank - 2) * 3
+
     val suitsMask = Suit.Spades.mask | Suit.Diamonds.mask | Suit.Clubs.mask | Suit.Hearts.mask
 
     // TODO some micro-optimisation around this - could see if this actually uses an intrinsic
@@ -125,18 +89,20 @@ extension (h: Hand) {
     val straightMask = Rank.Six.mask | Rank.Five.mask | Rank.Four.mask | Rank.Three.mask | Rank.Two.mask
 
     if (ranks == aceLowStraightMask && isFlush) {
-      return StraightFlush(Rank.Five)
+      // FIXME maybe change the LSB to be an ace low bit to make this less awkward
+      //  for the time being, mask off the Ace so it sorts correctly
+      return StraightFlush.mask | (ranks ^ Ace.mask)
     } else if (ranks == aceLowStraightMask) {
-      return Straight(Rank.Five)
+      return Straight.mask | (ranks ^ Ace.mask)
     }
 
     var shift = 0
     while (shift <= 24) {
       if (ranks == straightMask << shift) {
         if (isFlush) {
-          return StraightFlush(Rank.fromValue(6 + shift / 3))
+          return StraightFlush.mask | ranks
         } else {
-          return Straight(Rank.fromValue(6 + shift / 3))
+          return Straight.mask | ranks
         }
       }
 
@@ -145,10 +111,7 @@ extension (h: Hand) {
 
     // flush implies no pairs etc
     if (isFlush) {
-      // FIXME this hopefully can be removed with a different representation of Category (i.e. another mask rather than an ADT)
-      val ranks = Rank.values.filter(r => (r.mask & h) == r.mask)
-
-      return Flush(ranks(0), ranks(1), ranks(2), ranks(3), ranks(4))
+      return Flush.mask | ranks
     }
     // for bitset ...33332222, four of a kind is 222=100 or 333=100 etc
     val fourOfAKindMask = 4L
@@ -156,11 +119,11 @@ extension (h: Hand) {
     shift = 0
     while (shift <= 36) {
       if (((ranks >> shift) & fourOfAKindMask) == fourOfAKindMask) {
-        val quads = Rank.fromValue(2 + shift / 3)
+        val quads = shiftToRank(shift) - 2
         // mask off the quad bits and convert the remaining bit from a mask to a rank
-        val kicker = Rank.fromValue(2 + java.lang.Long.numberOfTrailingZeros(ranks ^ (fourOfAKindMask << shift)) / 3)
-
-        return FourOfAKind(quads, kicker)
+        val kicker = java.lang.Long.numberOfTrailingZeros(ranks ^ (fourOfAKindMask << shift)) / 3
+        
+        return FourOfAKind.mask | 1L << (quads + 13) | 1L << kicker
       }
 
       shift += 3
@@ -170,74 +133,95 @@ extension (h: Hand) {
     var trips = 0
     var pairLow = 0
     var pairHigh = 0
+    var kickers = 0
 
     val tripsMask = 3L
     val pairMask = 2L
+    // for a group of 3 bits, check if _only_ the bottom bit is set by ANDing it with 7 and checking the result is 1
+    //  000 & 111 == 000
+    //  001 & 111 == 001
+    //  010 & 111 == 010
+    //  011 & 111 == 011
+    //  100 & 111 == 100
+    //  101 & 111 == 101
+    //  110 & 111 == 110
+    //  111 & 111 == 111
+    val kickerMask = 7L
 
     // TODO this entire thing can probably be reduced to a single loop
     shift = 0
     while (shift <= 36) {
       if (((ranks >> shift) & tripsMask) == tripsMask) {
-        trips = 2 + shift / 3
+        trips = shiftToRank(shift)
         if (pairLow != 0) {
-          return FullHouse(Rank.fromValue(trips), Rank.fromValue(pairLow))
+          return FullHouse.mask | 1L << (trips - 2 + 26) | 1L << (pairLow - 2 + 13)
         }
       } else if (((ranks >> shift) & pairMask) == pairMask) {
         if (trips != 0) {
-          pairLow = 2 + shift / 3
-          return FullHouse(Rank.fromValue(trips), Rank.fromValue(pairLow))
+          pairLow = shiftToRank(shift)
+          return FullHouse.mask | 1L << (trips - 2 + 26) | 1L << (pairLow - 2 + 13)
         } else if (pairLow == 0) {
-          pairLow = 2 + shift / 3
+          pairLow = shiftToRank(shift)
         } else {
-          pairHigh = 2 + shift / 3
-
-          // mask off the pairs bits and convert the remaining bit from a mask to a rank
+          pairHigh = shiftToRank(shift)
           val pairsMask = (pairMask << shift) ^ (pairMask << ((pairLow - 2) * 3))
-          val kicker = Rank.fromValue(2 + java.lang.Long.numberOfTrailingZeros(ranks ^ pairsMask) / 3)
+          val kicker = java.lang.Long.numberOfTrailingZeros(ranks ^ pairsMask) / 3
 
-          return TwoPairs(Rank.fromValue(pairHigh), Rank.fromValue(pairLow), kicker)
+          return TwoPairs.mask | 1L << (pairLow - 2 + 13) | 1L << (pairHigh - 2 + 13) | 1L << kicker
         }
+      } else if (((ranks >> shift) & kickerMask) == 1L) {
+        kickers |= (1 << (shiftToRank(shift) - 2))
       }
 
       shift += 3
     }
 
+
     if (trips != 0) {
-      val ranks = Rank.values.filter(r => (r.mask & (h ^ (tripsMask << ((trips - 2) * 3)))) == r.mask)
-
-      ThreeOfAKind(Rank.fromValue(trips), ranks(0), ranks(1))
+      ThreeOfAKind.mask | (1L << (trips - 2 + 26)) | kickers
     } else if (pairLow != 0) {
-      val ranks = Rank.values.filter(r => (r.mask & h) == r.mask)
-
-      OnePair(Rank.fromValue(pairLow), ranks(0), ranks(1), ranks(2))
+      OnePair.mask | (1L << (pairLow - 2 + 13)) | kickers
     } else {
-      val ranks = Rank.values.filter(r => (r.mask & h) == r.mask)
-
-      HighCard(ranks(0), ranks(1), ranks(2), ranks(3), ranks(4))
+      HighCard.mask | ranks
     }
   }
 }
 
-private def maskDebugString(mask: Long): String =
-  s"""sdch_____________________AAAKKKQQQJJJTTT999888777666555444333222
-     |${mask.toBinaryString.reverse.padTo(64, "0").reverse.mkString}""".stripMargin
+private def maskDebugString(mask: Long): String = {
+  // For any hand A and hand B, if A > B, the numeric value of A must be > numeric value of B; the same applies for A == B and A < B.
+  // This necessitates a different representation for some categories, e.g. for a pair, the pair rank must weigh more than any kicker,
+  //  which requires rearranging the bits; for a straight, the ranks merely need to be ordered, which they already are
+  if (Vector(FourOfAKind, FullHouse, ThreeOfAKind, TwoPairs, OnePair).exists(c => (c.mask & mask) == c.mask)) {
+    s"""     s 4 f f s 3 2 1 h  |   trips    | pairs/quad |   kickers  |
+       |sdch_f_k_h_l_t_k_p_p_c___AKQJT98765432AKQJT98765432AKQJT98765432
+       |${mask.toBinaryString.reverse.padTo(64, "0").reverse.mkString}""".stripMargin
+  } else {
+    s"""     s 4 f f s 3 2 1 h
+       |sdch_f_k_h_l_t_k_p_p_c___AAAKKKQQQJJJTTT999888777666555444333222
+       |${mask.toBinaryString.reverse.padTo(64, "0").reverse.mkString}""".stripMargin
+  }
+}
 
 private def debugMask(ctx: String, mask: Long) = println(s"$ctx\n${maskDebugString(mask)}")
 
 enum Category {
-  case StraightFlush(highCard: Rank)
-  case FourOfAKind(quad: Rank, kicker: Rank)
-  case FullHouse(trips: Rank, pair: Rank)
-  case Flush(k0: Rank, k1: Rank, k2: Rank, k3: Rank, k4: Rank)
-  case Straight(highCard: Rank)
-  case ThreeOfAKind(trips: Rank, k0: Rank, k1: Rank)
-  case TwoPairs(highPair: Rank, lowPair: Rank, kicker: Rank)
-  case OnePair(pair: Rank, k0: Rank, k1: Rank, k2: Rank)
-  case HighCard(k0: Rank, k1: Rank, k2: Rank, k3: Rank, k4: Rank)
+  case StraightFlush
+  case FourOfAKind
+  case FullHouse
+  case Flush
+  case Straight
+  case ThreeOfAKind
+  case TwoPairs
+  case OnePair
+  case HighCard
 }
 
 object Category {
   given Ordering[Category] = (x: Category, y: Category) => y.ordinal - x.ordinal
+}
+
+extension (c: Category) {
+  def mask: Long = 1L << (58 - c.ordinal * 2)
 }
 
 import Rank.{Ace, *}

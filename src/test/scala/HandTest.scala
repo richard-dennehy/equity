@@ -10,7 +10,8 @@ import scala.annotation.targetName
 class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
   "hand" should "have a vaguely sane representation" in {
     Hand(As, _2c, _5d, Qh, Ts).debugString shouldBe
-      """sdch_____________________AAAKKKQQQJJJTTT999888777666555444333222
+      """     s 4 f f s 3 2 1 h
+        |sdch_f_k_h_l_t_k_p_p_c___AAAKKKQQQJJJTTT999888777666555444333222
         |1111000000000000000000000001000001000001000000000000001000000001""".stripMargin
   }
 
@@ -47,8 +48,8 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
     val orderedHands = List(worstThreeOfAKind, bestTwoPair, decentTwoPair, worstTwoPair)
 
     orderedHands.sliding(2).foreach { hands =>
-      hands.head should be > hands(1)
-      hands(1) should be < hands.head
+      hands.head.category should be > hands(1).category
+      hands(1).category should be < hands.head.category
     }
 
     val highCard = Hand(card(Ace, Spades), card(King, Spades), card(Queen, Spades), card(Jack, Spades), card(Nine, Diamonds))
@@ -72,8 +73,8 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
     )
 
     allCategories.sliding(2).foreach { hands =>
-      Hand.given_Ordering_Hand.lt(hands.head, hands(1)) shouldBe true withClue s"\n${hands.head.debugString}\n${hands(1).debugString}"
-      Hand.given_Ordering_Hand.gt(hands(1), hands.head) shouldBe true
+      hands.head.category should be < hands(1).category withClue s"\n${hands.head.category.debugString}\n${hands(1).category.debugString}"
+      hands(1).category should be > hands.head.category
     }
   }
 
@@ -110,10 +111,10 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
                               card(fifth, fifthSuit),
                             )
 
-                            hand.category shouldBe HighCard(highCard, second, third, fourth, fifth)
+                            hand.category shouldBe HighCard.mask | (highCard.mask + second.mask + third.mask + fourth.mask + fifth.mask)
                             count += 1
 
-                            hand should be <= prevHand
+                            hand.category should be <= prevHand.category
                             prevHand = hand
                           }
                       }
@@ -155,10 +156,11 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
                       card(kickerThree, kickerSuitThree),
                     )
 
-                    hand.category shouldBe OnePair(pair, kickerOne, kickerTwo, kickerThree)
+                    val expected = OnePair.mask | (1L << (pair.value - 2 + 13)) | kickerMask(kickerOne, kickerTwo, kickerThree)
+                    hand.category shouldBe expected
                     count += 1
 
-                    hand should be <= prevHand
+                    hand.category should be <= prevHand.category
                     prevHand = hand
                   }
                 }
@@ -180,7 +182,7 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
     //    for each suit different to C2, select C4 with the same rank
     //     for each suit and rank different to C1 and C2, select C5
     var count = 0
-    var prevHand = Hand(card(Ace, Spades), card(Ace, Diamonds), card(King, Spades), card(King, Diamonds), card(Jack, Spades))
+    var prevHand = Hand(card(Ace, Spades), card(Ace, Diamonds), card(King, Spades), card(King, Diamonds), card(Queen, Spades))
 
     Rank.values.foreach { pairOne =>
       Rank.values.drop(pairOne.ordinal + 1).foreach { pairTwo =>
@@ -196,10 +198,10 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
                   card(kicker, kickerSuit)
                 )
 
-                hand.category shouldBe TwoPairs(pairOne, pairTwo, kicker)
+                hand.category shouldBe TwoPairs.mask | 1L << (pairOne.value - 2 + 13) | 1L << (pairTwo.value - 2 + 13) | 1L << (kicker.value - 2)
                 count += 1
 
-                hand should be <= prevHand
+                hand.category should be <= prevHand.category
                 prevHand = hand
               }
             }
@@ -235,10 +237,10 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
                   card(kickerTwo, fifthSuit)
                 )
 
-                hand.category shouldBe ThreeOfAKind(trips, kickerOne, kickerTwo)
+                hand.category shouldBe ThreeOfAKind.mask | 1L << (trips.value - 2 + 26) | kickerMask(kickerOne, kickerTwo)
                 count += 1
 
-                hand should be <= prevHand
+                hand.category should be <= prevHand.category
                 prevHand = hand
               }
             }
@@ -284,10 +286,10 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
                     card(lowCard, fifthSuit),
                   )
 
-                  hand.category shouldBe Straight(highCard)
+                  hand.category shouldBe Straight.mask | (highCard.mask + (highCard - 1).mask + (highCard - 2).mask + (highCard - 3).mask + (if (highCard == Five) 0 else lowCard.mask))
                   count += 1
 
-                  hand should be <= prevHand
+                  hand.category should be <= prevHand.category
                   prevHand = hand
                 }
             }
@@ -328,10 +330,10 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
                     card(fifth, suit),
                   )
 
-                  hand.category shouldBe Flush(highCard, second, third, fourth, fifth)
+                  hand.category shouldBe Flush.mask | (highCard.mask + second.mask + third.mask + fourth.mask + fifth.mask)
                   count += 1
 
-                  hand should be <= prevHand
+                  hand.category should be <= prevHand.category
                   prevHand = hand
                 }
               }
@@ -365,10 +367,10 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
               card(pair, pairSuits(1)),
             )
 
-            hand.category shouldBe FullHouse(trips, pair)
+            hand.category shouldBe FullHouse.mask | 1L << (trips.value - 2 + 26) | 1L << (pair.value - 2 + 13)
             count += 1
 
-            hand should be <= prevHand
+            hand.category should be <= prevHand.category
             prevHand = hand
           }
         }
@@ -397,10 +399,10 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
             card(kicker, kickerSuit),
           )
 
-          hand.category shouldBe FourOfAKind(quads, kicker)
+          hand.category shouldBe FourOfAKind.mask | 1L << (quads.value - 2 + 13) | 1L << (kicker.value - 2)
           count += 1
 
-          hand should be <= prevHand
+          hand.category should be <= prevHand.category
           prevHand = hand
         }
       }
@@ -431,10 +433,10 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
           card(lowCard, suit),
         )
 
-        hand.category shouldBe StraightFlush(highCard)
+        hand.category shouldBe StraightFlush.mask | (highCard.mask + (highCard - 1).mask + (highCard - 2).mask + (highCard - 3).mask + (if (highCard == Five) 0 else lowCard.mask))
         count += 1
 
-        hand should be <= prevHand
+        hand.category should be <= prevHand.category
         prevHand = hand
       }
     }
@@ -448,4 +450,6 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
     // this is a bit unintuitive, but the short of it is the enum is declared in highest rank to lowest rank order, but ordinals go in the reverse order
     def -(ranks: Int): Rank = Rank.fromOrdinal(r.ordinal + ranks)
   }
+
+  private def kickerMask(kickers: Rank*): Long = kickers.map(1L << _.value - 2).sum
 }
