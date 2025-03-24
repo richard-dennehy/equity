@@ -15,6 +15,69 @@ class HandTest extends AnyFlatSpec with Matchers {
     assertThrows[IllegalArgumentException](Hand(As, As, _2c, _5d, Qh))
   }
 
+  it should "compare hands properly" in {
+    val bestTwoPair = Hand(
+      card(Ace, Spades),
+      card(Ace, Diamonds),
+      card(King, Clubs),
+      card(King, Hearts),
+      card(Queen, Spades)
+    )
+    val worstTwoPair = Hand(
+      card(Three, Spades),
+      card(Three, Diamonds),
+      card(Two, Clubs),
+      card(Two, Hearts),
+      card(Four, Spades)
+    )
+    val decentTwoPair = Hand(
+      card(Ten, Spades),
+      card(Ten, Diamonds),
+      card(Six, Clubs),
+      card(Six, Hearts),
+      card(Queen, Spades)
+    )
+    val worstThreeOfAKind = Hand(
+      card(Two, Spades),
+      card(Two, Diamonds),
+      card(Two, Clubs),
+      card(Three, Hearts),
+      card(Four, Spades)
+    )
+
+    val orderedHands = List(worstThreeOfAKind, bestTwoPair, decentTwoPair, worstTwoPair)
+
+    orderedHands.sliding(2).foreach { hands =>
+      hands.head should be > hands(1)
+      hands(1) should be < hands.head
+    }
+
+    val highCard = Hand(card(Ace, Spades), card(King, Spades), card(Queen, Spades), card(Jack, Spades), card(Nine, Diamonds))
+    val onePair = Hand(card(Ace, Spades), card(Ace, Diamonds), card(King, Spades), card(Queen, Spades), card(Jack, Spades))
+    val straight = Hand(card(Ace, Spades), card(King, Diamonds), card(Queen, Spades), card(Jack, Spades), card(Ten, Spades))
+    val flush = Hand(card(Ace, Spades), card(King, Spades), card(Queen, Spades), card(Jack, Spades), card(Nine, Spades))
+    val fullHouse = Hand(card(Ace, Spades), card(Ace, Diamonds), card(Ace, Clubs), card(King, Spades), card(King, Diamonds))
+    val fourOfAKind = Hand(card(Ace, Spades), card(Ace, Diamonds), card(Ace, Clubs), card(Ace, Hearts), card(King, Spades))
+    val straightFlush = Hand(card(Ace, Spades), card(King, Spades), card(Queen, Spades), card(Jack, Spades), card(Ten, Spades))
+
+    val allCategories = List(
+      highCard,
+      onePair,
+      bestTwoPair,
+      worstThreeOfAKind,
+      straight,
+      flush,
+      fullHouse,
+      fourOfAKind,
+      straightFlush
+    )
+
+    allCategories.sliding(2).foreach { hands =>
+      hands.head should be < hands(1)
+      hands(1) should be > hands.head
+    }
+  }
+
   it should "allow all high card hands" in {
     // for each rank A -> 7 and each suit select C1 (7-high is the worst hand; 6-high must either be a straight or actually Ace-high)
     //  for each rank below C1 and each suit select C2
@@ -22,42 +85,46 @@ class HandTest extends AnyFlatSpec with Matchers {
     //    for each rank below C3 and each suit select C4
     //     for each rank below C2, such that it's not actually a straight, and each suit, such that it's not a flush, select C5
     var count = 0
+    var prevHand = Hand(card(Ace, Spades), card(King, Spades), card(Queen, Spades), card(Jack, Spades), card(Nine, Diamonds))
 
-    Suit.values.foreach { firstSuit =>
-      Suit.values.foreach { secondSuit =>
-        Suit.values.foreach { thirdSuit =>
-          Suit.values.foreach { fourthSuit =>
-            Suit.values
-              .filter(s => s != fourthSuit || fourthSuit != thirdSuit || thirdSuit != secondSuit || secondSuit != firstSuit) // exclude flushes
-              .foreach { fifthSuit =>
-              Rank.values.takeWhile(_ != Six).foreach { highCard =>
-                Rank.values
-                  .drop(highCard.ordinal + 1) // keep the cards in rank order to keep this easier to reason about and minimise permutations
-                  .takeWhile(_ != Four) // following the above rule, this card has to be at least 5, otherwise there aren't enough lower rank cards to finish the hand
-                  .filter(highCard != Ace || _ != Five) // avoid accidentally making a 5-A straight flush
-                  .foreach { second =>
-                    Rank.values.drop(second.ordinal + 1).takeWhile(_ != Three).foreach { third =>
-                      Rank.values.drop(third.ordinal + 1).takeWhile(_ != Two).foreach { fourth =>
-                        Rank.values.drop(fourth.ordinal + 1).dropWhile(highCard.value - _.value < 5).foreach { fifth =>
-                          val hand = Hand(
-                            card(highCard, firstSuit),
-                            card(second, secondSuit),
-                            card(third, thirdSuit),
-                            card(fourth, fourthSuit),
-                            card(fifth, fifthSuit),
-                          )
+    Rank.values.takeWhile(_ != Six).foreach { highCard =>
+      Rank.values
+        .drop(highCard.ordinal + 1) // keep the cards in rank order to keep this easier to reason about and minimise permutations
+        .takeWhile(_ != Four) // following the above rule, this card has to be at least 5, otherwise there aren't enough lower rank cards to finish the hand
+        .filter(highCard != Ace || _ != Five) // avoid accidentally making a 5-A straight flush
+        .foreach { second =>
+          Rank.values.drop(second.ordinal + 1).takeWhile(_ != Three).foreach { third =>
+            Rank.values.drop(third.ordinal + 1).takeWhile(_ != Two).foreach { fourth =>
+              Rank.values.drop(fourth.ordinal + 1).dropWhile(highCard.value - _.value < 5).foreach { fifth =>
+                Suit.values.foreach { firstSuit =>
+                  Suit.values.foreach { secondSuit =>
+                    Suit.values.foreach { thirdSuit =>
+                      Suit.values.foreach { fourthSuit =>
+                        Suit.values
+                          .filter(s => s != fourthSuit || fourthSuit != thirdSuit || thirdSuit != secondSuit || secondSuit != firstSuit) // exclude flushes
+                          .foreach { fifthSuit =>
+                            val hand = Hand(
+                              card(highCard, firstSuit),
+                              card(second, secondSuit),
+                              card(third, thirdSuit),
+                              card(fourth, fourthSuit),
+                              card(fifth, fifthSuit),
+                            )
 
-                          hand.category shouldBe HighCard
-                          count += 1
-                        }
+                            hand.category shouldBe HighCard(highCard, second, third, fourth, fifth)
+                            count += 1
+
+                            hand should be <= prevHand
+                            prevHand = hand
+                          }
                       }
                     }
                   }
+                }
               }
             }
           }
         }
-      }
     }
 
     // NOTE there's 1302540 meaningfully distinct high cards
@@ -71,15 +138,16 @@ class HandTest extends AnyFlatSpec with Matchers {
     //    for each rank and suit different to C3, select C4
     //     for each rank and suit different to C4, select C5
     var count = 0
+    var prevHand = Hand(card(Ace, Spades), card(Ace, Diamonds), card(King, Spades), card(Queen, Spades), card(Jack, Spades))
 
-    Suit.values.combinations(2).foreach { pairSuits =>
-      Suit.values.foreach { kickerSuitOne =>
-        Suit.values.foreach { kickerSuitTwo =>
-          Suit.values.foreach { kickerSuitThree =>
-            Rank.values.foreach { pair =>
-              Rank.values.takeWhile(_ != Three).filter(_ != pair).foreach { kickerOne =>
-                Rank.values.drop(kickerOne.ordinal + 1).filter(_ != pair).dropRight(1).foreach { kickerTwo =>
-                  Rank.values.drop(kickerTwo.ordinal + 1).filter(_ != pair).foreach { kickerThree =>
+    Rank.values.foreach { pair =>
+      Rank.values.takeWhile(_ != Three).filter(_ != pair).foreach { kickerOne =>
+        Rank.values.drop(kickerOne.ordinal + 1).filter(_ != pair).dropRight(1).foreach { kickerTwo =>
+          Rank.values.drop(kickerTwo.ordinal + 1).filter(_ != pair).foreach { kickerThree =>
+            Suit.values.combinations(2).foreach { pairSuits =>
+              Suit.values.foreach { kickerSuitOne =>
+                Suit.values.foreach { kickerSuitTwo =>
+                  Suit.values.foreach { kickerSuitThree =>
                     val hand = Hand(
                       card(pair, pairSuits(0)),
                       card(pair, pairSuits(1)),
@@ -88,8 +156,11 @@ class HandTest extends AnyFlatSpec with Matchers {
                       card(kickerThree, kickerSuitThree),
                     )
 
-                    hand.category shouldBe OnePair
+                    hand.category shouldBe OnePair(pair, kickerOne, kickerTwo, kickerThree)
                     count += 1
+
+                    hand should be <= prevHand
+                    prevHand = hand
                   }
                 }
               }
@@ -110,13 +181,14 @@ class HandTest extends AnyFlatSpec with Matchers {
     //    for each suit different to C2, select C4 with the same rank
     //     for each suit and rank different to C1 and C2, select C5
     var count = 0
+    var prevHand = Hand(card(Ace, Spades), card(Ace, Diamonds), card(King, Spades), card(King, Diamonds), card(Jack, Spades))
 
-    Suit.values.combinations(2).foreach { pairOneSuits =>
-      Suit.values.combinations(2).foreach { pairTwoSuits =>
-        Suit.values.foreach { kickerSuit =>
-          Rank.values.foreach { pairOne =>
-            Rank.values.drop(pairOne.ordinal + 1).foreach { pairTwo =>
-              Rank.values.filter(r => r != pairOne && r != pairTwo).foreach { kicker =>
+    Rank.values.foreach { pairOne =>
+      Rank.values.drop(pairOne.ordinal + 1).foreach { pairTwo =>
+        Rank.values.filter(r => r != pairOne && r != pairTwo).foreach { kicker =>
+          Suit.values.combinations(2).foreach { pairOneSuits =>
+            Suit.values.combinations(2).foreach { pairTwoSuits =>
+              Suit.values.foreach { kickerSuit =>
                 val hand = Hand(
                   card(pairOne, pairOneSuits(0)),
                   card(pairOne, pairOneSuits(1)),
@@ -125,8 +197,11 @@ class HandTest extends AnyFlatSpec with Matchers {
                   card(kicker, kickerSuit)
                 )
 
-                hand.category shouldBe TwoPairs
+                hand.category shouldBe TwoPairs(pairOne, pairTwo, kicker)
                 count += 1
+
+                hand should be <= prevHand
+                prevHand = hand
               }
             }
           }
@@ -145,13 +220,14 @@ class HandTest extends AnyFlatSpec with Matchers {
     //    for each suit and rank different to C1, select C4
     //     for each suit and rank different to C4, select C5
     var count = 0
+    var prevHand = Hand(card(Ace, Spades), card(Ace, Diamonds), card(Ace, Clubs), card(King, Spades), card(Queen, Spades))
 
-    Suit.values.combinations(3).foreach { tripsSuits =>
-      Suit.values.foreach { fourthSuit =>
-        Suit.values.foreach { fifthSuit =>
-          Rank.values.foreach { trips =>
-            Rank.values.filter(_ != trips).foreach { kickerOne =>
-              Rank.values.drop(kickerOne.ordinal + 1).filter(_ != trips).foreach { kickerTwo =>
+    Rank.values.foreach { trips =>
+      Rank.values.filter(_ != trips).foreach { kickerOne =>
+        Rank.values.drop(kickerOne.ordinal + 1).filter(_ != trips).foreach { kickerTwo =>
+          Suit.values.combinations(3).foreach { tripsSuits =>
+            Suit.values.foreach { fourthSuit =>
+              Suit.values.foreach { fifthSuit =>
                 val hand = Hand(
                   card(trips, tripsSuits(0)),
                   card(trips, tripsSuits(1)),
@@ -160,8 +236,11 @@ class HandTest extends AnyFlatSpec with Matchers {
                   card(kickerTwo, fifthSuit)
                 )
 
-                hand.category shouldBe ThreeOfAKind
+                hand.category shouldBe ThreeOfAKind(trips, kickerOne, kickerTwo)
                 count += 1
+
+                hand should be <= prevHand
+                prevHand = hand
               }
             }
           }
@@ -186,38 +265,33 @@ class HandTest extends AnyFlatSpec with Matchers {
     //    for each suit, select C4 with rank 2
     //     for each suit different to C4, select C5 with rank A
     var count = 0
+    var prevHand = Hand(card(Ace, Spades), card(King, Diamonds), card(Queen, Spades), card(Jack, Spades), card(Ten, Spades))
 
-    Suit.values.foreach { firstSuit =>
-      Suit.values.foreach { secondSuit =>
-        Suit.values.foreach { thirdSuit =>
-          Suit.values.foreach { fourthSuit =>
-            Suit.values
-              .filter(s => s != fourthSuit || fourthSuit != thirdSuit || thirdSuit != secondSuit || secondSuit != firstSuit) // exclude flushes
-              .foreach { fifthSuit =>
-                Rank.values.takeWhile(_ != Five).foreach { highCard =>
+    Rank.values.takeWhile(_ != Four).foreach { highCard =>
+      Suit.values.foreach { firstSuit =>
+        Suit.values.foreach { secondSuit =>
+          Suit.values.foreach { thirdSuit =>
+            Suit.values.foreach { fourthSuit =>
+              Suit.values
+                .filter(s => s != fourthSuit || fourthSuit != thirdSuit || thirdSuit != secondSuit || secondSuit != firstSuit) // exclude flushes
+                .foreach { fifthSuit =>
+                  val lowCard = if (highCard == Five) Ace else highCard - 4
+
                   val hand = Hand(
                     card(highCard, firstSuit),
                     card(highCard - 1, secondSuit),
                     card(highCard - 2, thirdSuit),
                     card(highCard - 3, fourthSuit),
-                    card(highCard - 4, fifthSuit),
+                    card(lowCard, fifthSuit),
                   )
 
-                  hand.category shouldBe Straight
+                  hand.category shouldBe Straight(highCard)
                   count += 1
+
+                  hand should be <= prevHand
+                  prevHand = hand
                 }
-
-                val hand = Hand(
-                  card(Five, firstSuit),
-                  card(Four, secondSuit),
-                  card(Three, thirdSuit),
-                  card(Two, fourthSuit),
-                  card(Ace, fifthSuit),
-                )
-
-                hand.category shouldBe Straight
-                count += 1
-              }
+            }
           }
         }
       }
@@ -234,18 +308,19 @@ class HandTest extends AnyFlatSpec with Matchers {
     //    for each rank below C3 and above 2 select C4 with the same suit
     //     for each rank below C2 and at least 5 ranks below C1 select C5 with the same suit
     var count = 0
+    var prevHand = Hand(card(Ace, Spades), card(King, Spades), card(Queen, Spades), card(Jack, Spades), card(Nine, Spades))
 
-    Suit.values.foreach { suit =>
-      // we can't have a 6-high flush without it being a straight
-      Rank.values.takeWhile(_ != Six).foreach { highCard =>
-        Rank.values
-          .drop(highCard.ordinal + 1) // keep the cards in rank order to keep this easier to reason about and minimise permutations
-          .takeWhile(_ != Four) // following the above rule, this card has to be at least 5, otherwise there aren't enough lower rank cards to finish the hand
-          .filter(highCard != Ace || _ != Five) // avoid accidentally making a 5-A straight flush
-          .foreach { second =>
-            Rank.values.drop(second.ordinal + 1).takeWhile(_ != Three).foreach { third =>
-              Rank.values.drop(third.ordinal + 1).takeWhile(_ != Two).foreach { fourth =>
-                Rank.values.drop(fourth.ordinal + 1).dropWhile(highCard.value - _.value < 5).foreach { fifth =>
+    // we can't have a 6-high flush without it being a straight
+    Rank.values.takeWhile(_ != Six).foreach { highCard =>
+      Rank.values
+        .drop(highCard.ordinal + 1) // keep the cards in rank order to keep this easier to reason about and minimise permutations
+        .takeWhile(_ != Four) // following the above rule, this card has to be at least 5, otherwise there aren't enough lower rank cards to finish the hand
+        .filter(highCard != Ace || _ != Five) // avoid accidentally making a 5-A straight flush
+        .foreach { second =>
+          Rank.values.drop(second.ordinal + 1).takeWhile(_ != Three).foreach { third =>
+            Rank.values.drop(third.ordinal + 1).takeWhile(_ != Two).foreach { fourth =>
+              Rank.values.drop(fourth.ordinal + 1).dropWhile(highCard.value - _.value < 5).foreach { fifth =>
+                Suit.values.foreach { suit =>
                   val hand = Hand(
                     card(highCard, suit),
                     card(second, suit),
@@ -254,13 +329,16 @@ class HandTest extends AnyFlatSpec with Matchers {
                     card(fifth, suit),
                   )
 
-                  hand.category shouldBe Flush
+                  hand.category shouldBe Flush(highCard, second, third, fourth, fifth)
                   count += 1
+
+                  hand should be <= prevHand
+                  prevHand = hand
                 }
               }
             }
           }
-      }
+        }
     }
 
     // NOTE there's 5108 meaningfully distinct flushes
@@ -274,6 +352,7 @@ class HandTest extends AnyFlatSpec with Matchers {
     //    for each suit different to C2, select C4 with the same rank
     //     for each suit different to C4 and C1, select C5 with the same rank
     var count = 0
+    var prevHand = Hand(card(Ace, Spades), card(Ace, Diamonds), card(Ace, Clubs), card(King, Spades), card(King, Diamonds))
 
     Rank.values.foreach { trips =>
       Rank.values.filter(_ != trips).foreach { pair =>
@@ -287,8 +366,11 @@ class HandTest extends AnyFlatSpec with Matchers {
               card(pair, pairSuits(1)),
             )
 
-            hand.category shouldBe FullHouse
+            hand.category shouldBe FullHouse(trips, pair)
             count += 1
+
+            hand should be <= prevHand
+            prevHand = hand
           }
         }
       }
@@ -303,6 +385,7 @@ class HandTest extends AnyFlatSpec with Matchers {
     //  for each suit and rank different to C1, select C2
     //   select C3, C4, and C5 as the same rank as C1 but different suits
     var count = 0
+    var prevHand = Hand(card(Ace, Spades), card(Ace, Diamonds), card(Ace, Clubs), card(Ace, Hearts), card(King, Spades))
 
     Rank.values.foreach { quads =>
       Rank.values.filter(_ != quads).foreach { kicker =>
@@ -315,8 +398,11 @@ class HandTest extends AnyFlatSpec with Matchers {
             card(kicker, kickerSuit),
           )
 
-          hand.category shouldBe FourOfAKind
+          hand.category shouldBe FourOfAKind(quads, kicker)
           count += 1
+
+          hand should be <= prevHand
+          prevHand = hand
         }
       }
     }
@@ -332,31 +418,26 @@ class HandTest extends AnyFlatSpec with Matchers {
     //    select C4 as same suit as C3 and one rank lower
     //     select C5 as same suit as C4 and one rank lower
     var count = 0
+    var prevHand = Hand(card(Ace, Spades), card(King, Spades), card(Queen, Spades), card(Jack, Spades), card(Ten, Spades))
 
-    Suit.values.foreach { suit =>
-      Rank.values.takeWhile(_ != Five).foreach { highCard =>
+    Rank.values.takeWhile(_ != Four).foreach { highCard =>
+      Suit.values.foreach { suit =>
+        val lowCard = if (highCard == Five) Ace else highCard - 4
+
         val hand = Hand(
           card(highCard, suit),
           card(highCard - 1, suit),
           card(highCard - 2, suit),
           card(highCard - 3, suit),
-          card(highCard - 4, suit),
+          card(lowCard, suit),
         )
 
-        hand.category shouldBe StraightFlush
+        hand.category shouldBe StraightFlush(highCard)
         count += 1
+
+        hand should be <= prevHand
+        prevHand = hand
       }
-
-      val hand = Hand(
-        card(Five, suit),
-        card(Four, suit),
-        card(Three, suit),
-        card(Two, suit),
-        card(Ace, suit),
-      )
-
-      hand.category shouldBe StraightFlush
-      count += 1
     }
 
     // NOTE there's 40 meaningfully distinct straight flushes
