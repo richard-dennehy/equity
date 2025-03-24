@@ -489,7 +489,7 @@ def drawProbability(rank: Option[Rank], suit: Option[Suit], drawn: Vector[Card])
 
 case class PossibleHand(hand: RankedHand, probability: Float)
 
-case class Equity(win: Float, draw: Float)
+case class Equity(var win: Float, var draw: Float)
 
 // check for straight flush - 10 distinct; 40 ways; at most 2 different suits for any player
 // check for four of a kind - 156 distinct; 624 ways; at most 2 different ways for any player
@@ -512,12 +512,33 @@ case class Equity(win: Float, draw: Float)
 //  - more importantly; nobody _wants_ to flush from 4 of a kind, even if they could
 
 // just return the count for now - this ultimately needs to take all the player hands and drive the equity calculation
-def possibleCommunityCards(current: Vector[Card], drawn: Vector[Card]): Int = {
-  var iterations = 0
+def equityProbably(community: Vector[Card], p1: (Card, Card), p2: (Card, Card)): Outcome = {
+  val drawn = Vector(p1._1, p1._2, p2._1, p2._2) ++ community
+  val outcome = Outcome(
+    Equity(0.0, 0.0),
+    Equity(0.0, 0.0),
+    0
+  )
 
-  if (current.size == 5) {
+  inline def updateOutcome(communityCards: Vector[Card]) = {
+    val p1Best = bestHand(communityCards, p1)
+    val p2Best = bestHand(communityCards, p2)
+
+    if (p1Best > p2Best) {
+      outcome.p1.win += 1
+    } else if (p1Best == p2Best) {
+      outcome.p1.draw += 1
+      outcome.p2.draw += 1
+    } else {
+      outcome.p2.win += 1
+    }
+
+    outcome.possibilities += 1
+  }
+
+  if (community.size == 5) {
     // only one possible hand
-    iterations += 1
+    updateOutcome(community)
   } else {
     var rank5 = Rank.Ace.value
     var suit5 = 0
@@ -525,7 +546,7 @@ def possibleCommunityCards(current: Vector[Card], drawn: Vector[Card]): Int = {
     while (rank5 >= 2) {
       val card5 = card(Rank.fromValue(rank5), Suit.fromOrdinal(suit5))
       if (drawProbability(Some(card5.rank), Some(card5.suit), drawn) != 0f) {
-        if (current.size <= 3) {
+        if (community.size <= 3) {
           var rank4 = rank5
           var suit4 = suit5 + 1
 
@@ -539,7 +560,7 @@ def possibleCommunityCards(current: Vector[Card], drawn: Vector[Card]): Int = {
             val card4 = card(Rank.fromValue(rank4), Suit.fromOrdinal(suit4))
 
             if (drawProbability(Some(card4.rank), Some(card4.suit), drawn :+ card5) != 0f) {
-              if (current.size < 3) {
+              if (community.size < 3) {
                 var rank3 = rank4
                 var suit3 = suit4 + 1
 
@@ -574,8 +595,7 @@ def possibleCommunityCards(current: Vector[Card], drawn: Vector[Card]): Int = {
                         while (rank1 >= 2) {
                           val card1 = card(Rank.fromValue(rank1), Suit.fromOrdinal(suit1))
                           if (drawProbability(Some(card1.rank), Some(card1.suit), drawn :+ card5 :+ card4 :+ card3 :+ card2) != 0f) {
-                            // TODO hand
-                            iterations += 1
+                            updateOutcome(Vector(card1, card2, card3, card4, card5))
                           }
 
                           suit1 = suit1 + 1
@@ -602,8 +622,7 @@ def possibleCommunityCards(current: Vector[Card], drawn: Vector[Card]): Int = {
                   }
                 }
               } else {
-                // TODO make hand
-                iterations += 1
+                updateOutcome(community :+ card4 :+ card5)
               }
             }
 
@@ -614,8 +633,7 @@ def possibleCommunityCards(current: Vector[Card], drawn: Vector[Card]): Int = {
             }
           }
         } else {
-          // TODO actually use the card
-          iterations += 1
+          updateOutcome(community :+ card5)
         }
       }
 
@@ -635,5 +653,56 @@ def possibleCommunityCards(current: Vector[Card], drawn: Vector[Card]): Int = {
   //     for either community card 5 _or_ R down to 2 in <Spades, Diamonds, Clubs, Hearts>
   //      create community hand; give win to best player hand (or tie)
 
-  iterations
+  outcome.p1.win /= outcome.possibilities
+  outcome.p1.draw /= outcome.possibilities
+
+  outcome.p2.win /= outcome.possibilities
+  outcome.p2.draw /= outcome.possibilities
+
+  outcome
 }
+
+// FIXME this function appears to be astoundingly slow
+def bestHand(communityCards: Vector[Card], holeCards: (Card, Card)): RankedHand = {
+  var best = Hand(communityCards(0), communityCards(1), communityCards(2), communityCards(3), communityCards(4)).rank
+
+  inline def tryHand(hand: Hand) = {
+    best = math.max(hand.rank, best)
+  }
+
+  // remove 1 and replace with A/B
+  tryHand(Hand(communityCards(0), communityCards(1), communityCards(2), communityCards(3), holeCards._1))
+  tryHand(Hand(communityCards(0), communityCards(1), communityCards(2), communityCards(3), holeCards._2))
+
+  tryHand(Hand(communityCards(0), communityCards(1), communityCards(2), holeCards._1, communityCards(4)))
+  tryHand(Hand(communityCards(0), communityCards(1), communityCards(2), holeCards._2, communityCards(4)))
+
+  tryHand(Hand(communityCards(0), communityCards(1), holeCards._1, communityCards(3), communityCards(4)))
+  tryHand(Hand(communityCards(0), communityCards(1), holeCards._2, communityCards(3), communityCards(4)))
+
+  tryHand(Hand(communityCards(0), holeCards._1, communityCards(2), communityCards(3), communityCards(4)))
+  tryHand(Hand(communityCards(0), holeCards._2, communityCards(2), communityCards(3), communityCards(4)))
+
+  tryHand(Hand(holeCards._1, communityCards(1), communityCards(2), communityCards(3), communityCards(4)))
+  tryHand(Hand(holeCards._2, communityCards(1), communityCards(2), communityCards(3), communityCards(4)))
+
+  // remove 2 and replace with A and B
+  tryHand(Hand(communityCards(0), communityCards(1), communityCards(2), holeCards._1, holeCards._2))
+  tryHand(Hand(communityCards(0), communityCards(1), holeCards._1, communityCards(3), holeCards._2))
+  tryHand(Hand(communityCards(0), communityCards(1), holeCards._1, holeCards._2, communityCards(4)))
+  tryHand(Hand(communityCards(0), holeCards._1, communityCards(2), communityCards(3), holeCards._2))
+  tryHand(Hand(communityCards(0), holeCards._1, communityCards(2), holeCards._2, communityCards(4)))
+  tryHand(Hand(communityCards(0), holeCards._1, holeCards._2, communityCards(3), communityCards(4)))
+  tryHand(Hand(holeCards._1, communityCards(1), communityCards(2), communityCards(3), holeCards._2))
+  tryHand(Hand(holeCards._1, communityCards(1), communityCards(2), holeCards._2, communityCards(4)))
+  tryHand(Hand(holeCards._1, communityCards(1), holeCards._2, communityCards(3), communityCards(4)))
+  tryHand(Hand(holeCards._1, holeCards._2, communityCards(2), communityCards(3), communityCards(4)))
+
+  best
+}
+
+case class Outcome(
+  var p1: Equity,
+  var p2: Equity,
+  var possibilities: Int
+)
