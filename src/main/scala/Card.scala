@@ -76,6 +76,8 @@ extension (h: Hand) {
 
     // TODO some micro-optimisation around this - could see if this actually uses an intrinsic
     val isFlush = java.lang.Long.bitCount(h & suitsMask) == 1
+    val straightFlag = if (isFlush) StraightFlush.mask else Straight.mask
+
     val ranks = h & ~suitsMask
 
     // given a bitset AAAKKKQQQJJJ...333222, a straight is either AAA=001;KKK=001;QQQ=001...etc or AAA=001;555=001;444=001...etc
@@ -83,46 +85,13 @@ extension (h: Hand) {
     val aceLowStraightMask = Rank.Ace.handMask | Rank.Five.handMask | Rank.Four.handMask | Rank.Three.handMask | Rank.Two.handMask
     val straightMask = Rank.Six.handMask | Rank.Five.handMask | Rank.Four.handMask | Rank.Three.handMask | Rank.Two.handMask
 
-    if (ranks == aceLowStraightMask && isFlush) {
+    if (ranks == aceLowStraightMask) {
       // mask off the Ace so it sorts correctly
-      return StraightFlush.mask | (ranks ^ Ace.handMask)
-    } else if (ranks == aceLowStraightMask) {
-      return Straight.mask | (ranks ^ Ace.handMask)
+      return straightFlag | (ranks ^ Ace.handMask)
     }
 
-    var shift = 0
-    while (shift <= 24) {
-      if (ranks == straightMask << shift) {
-        if (isFlush) {
-          return StraightFlush.mask | ranks
-        } else {
-          return Straight.mask | ranks
-        }
-      }
-
-      shift += 3
-    }
-
-    // flush implies no pairs etc
-    if (isFlush) {
-      return Flush.mask | ranks
-    }
     // for bitset ...33332222, four of a kind is 222=100 or 333=100 etc
     val fourOfAKindMask = 4L
-
-    shift = 0
-    while (shift <= 36) {
-      if (((ranks >> shift) & fourOfAKindMask) == fourOfAKindMask) {
-        val quads = shiftToOffset(shift)
-        // mask off the quad bits and convert the remaining bit from a mask to a rank
-        val kicker = java.lang.Long.numberOfTrailingZeros(ranks ^ (fourOfAKindMask << shift)) / 3
-
-        return FourOfAKind.mask | 1L << (quads + 13) | 1L << kicker
-      }
-
-      shift += 3
-    }
-
     // three of a kind and pair are more complicated, as there could be a full house or two pairs or neither of those
     var trips = -1
     var pairLow = -1
@@ -142,10 +111,19 @@ extension (h: Hand) {
     //  111 & 111 == 111
     val kickerMask = 7L
 
-    // TODO this entire thing can probably be reduced to a single loop
-    shift = 0
+    var shift = 0
     while (shift <= 36) {
-      if (((ranks >> shift) & tripsMask) == tripsMask) {
+      if (shift <= 24 && ranks == straightMask << shift) {
+        return straightFlag | ranks
+      } else if (shift > 24 && isFlush) {
+        return Flush.mask | ranks
+      } else if (((ranks >> shift) & fourOfAKindMask) == fourOfAKindMask) {
+        val quads = shiftToOffset(shift)
+        // mask off the quad bits and convert the remaining bit from a mask to a rank
+        val kicker = java.lang.Long.numberOfTrailingZeros(ranks ^ (fourOfAKindMask << shift)) / 3
+
+        return FourOfAKind.mask | 1L << (quads + 13) | 1L << kicker
+      } else if (((ranks >> shift) & tripsMask) == tripsMask) {
         trips = shiftToOffset(shift)
         if (pairLow != -1) {
           return FullHouse.mask | 1L << (trips + 26) | 1L << (pairLow + 13)
@@ -169,7 +147,6 @@ extension (h: Hand) {
 
       shift += 3
     }
-
 
     if (trips != -1) {
       ThreeOfAKind.mask | (1L << (trips + 26)) | kickers
