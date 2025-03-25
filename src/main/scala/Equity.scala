@@ -164,7 +164,6 @@ inline def drawProbability(card: Card, drawn: Vector[Card]): Float = {
 
 // FIXME this function appears to be astoundingly slow
 //  I haven't bothered measuring properly, but anecdotally, the runtime of the "empty community hand" test goes from ~200ms to ~2s when this function is introduced
-// TODO this really could do with some tests
 //
 // Given 5 community cards and a pair of hole cards, returns the best possible hand of 5 cards. This hand doesn't necessarily contain either hole card.
 def bestHand(communityCards: Vector[Card], holeCards: (Card, Card)): RankedHand = {

@@ -16,7 +16,7 @@ enum Suit {
 
 extension (s: Suit) {
   // in the Hand mask, a suit is tagged in one of the top 4 bits
-  def handMask: Long = Long.MinValue >>> s.ordinal
+  inline def handMask: Long = Long.MinValue >>> s.ordinal
 }
 
 // A named card Rank ordered from highest value to lowest value
@@ -47,6 +47,10 @@ extension (r: Rank) {
   inline def -(offset: Int): Rank = Rank.fromOrdinal(r.ordinal + offset)
   inline def +(offset: Int): Rank = Rank.fromOrdinal(r.ordinal - offset)
 }
+
+// TODO mad idea - hand of 7 cards; produce highest ranking possible from any 5 of 7
+//  - there are 133784560 possibilities here, which can fit in 28 bits - but this requires a clever encoding of the problem
+//    would it be possible to store as a low card and 6 deltas between each card and the next, assuming the hand is sorted?
 
 // Represent a Hand of 5 cards as a bitset such that identifying patterns is relatively simple. See `maskDebugString`
 //  and `category` for more details, but briefly:
