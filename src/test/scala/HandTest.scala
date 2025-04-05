@@ -15,6 +15,14 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
         |1111000000000000000000000001000001000001000000000000001000000001""".stripMargin
   }
 
+  "hand7" should "have a vaguely sane representation" in {
+    Hand7(As, Kd, Tc, Th, _7s, _6c, _6h).debugString7 shouldBe
+      """
+        |_______|_1_|_2_|_3_|_4_|_5_|_6_|_7_|____Δ2-3____Δ4-5____Δ6-7____
+        |________hcdshcdshcdshcdshcdshcdshcdsΔ1-2____Δ3-4____Δ5-6____base
+        |0000000000010010010010000001010010000001001100000011000100000110""".stripMargin
+  }
+
   it should "compare hands properly" in {
     val bestTwoPair = Hand(
       card(Ace, Spades),

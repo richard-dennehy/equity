@@ -58,6 +58,52 @@ extension (r: Rank) {
 //  - the bottom 39 bits represent Rank counts; the bottom 3 bits are the number of 2s, the next 3 are the number of 3s, etc
 opaque type Hand = Long
 
+// Use 64 bits to represent 7 cards - it's technically possible to fit this within 32 bits, but trying to find a reasonable encoding that
+//  fits in 32 bits is very difficult (it appears to require variable width encoding)
+//
+// The bottom 4 bits are the lowest ranked card; this only needs 12 possible states as this card can't be an Ace
+//
+// The next 24 bits are rank deltas (6 * 4) - that is, AAAAKKK is represented as 0,0,0,1,0,0,12; AJ97532 is 3,2,2,2,2,1,2, etc
+// This makes patterns such as straights and pairs easily identified
+//
+// The next 28 bits are the suits for each card (7 * 4) - while the suits could easily fit in 2 bits, there's no particular benefit
+//  to making the representation more compact as it's still more than 32 bits
+opaque type Hand7 = Long
+
+object Hand7 {
+  def apply(first: Card, second: Card, third: Card, fourth: Card, fifth: Card, sixth: Card, seventh: Card): Hand7 = {
+    // IMPORTANT the cards _must_ be sorted - if it's not practical to ensure they're sorted when this method is called, then the first thing
+    //  this method will need to do is sort the cards
+    val suitMask =
+      (1L << (first.suit.ordinal + 24)) +
+      (1L << (second.suit.ordinal + 20)) +
+      (1L << (third.suit.ordinal + 16)) +
+      (1L << (fourth.suit.ordinal + 12)) +
+      (1L << (fifth.suit.ordinal + 8)) +
+      (1L << (sixth.suit.ordinal + 4)) +
+      (1L << seventh.suit.ordinal)
+
+    val cardsMask =
+      ((first.rank.value - second.rank.value).toLong << 24) +
+      ((second.rank.value - third.rank.value).toLong << 20) +
+      ((third.rank.value - fourth.rank.value).toLong << 16) +
+      ((fourth.rank.value - fifth.rank.value).toLong << 12) +
+      ((fifth.rank.value - sixth.rank.value).toLong << 8) +
+      ((sixth.rank.value - seventh.rank.value).toLong << 4) +
+      seventh.rank.value
+
+    (suitMask << 28) + cardsMask
+  }
+}
+
+extension (h: Hand7) {
+  def debugString7: String =
+    s"""
+       |_______|_1_|_2_|_3_|_4_|_5_|_6_|_7_|____Δ2-3____Δ4-5____Δ6-7____
+       |________hcdshcdshcdshcdshcdshcdshcdsΔ1-2____Δ3-4____Δ5-6____base
+       |${h.toBinaryString.reverse.padTo(64, "0").reverse.mkString}""".stripMargin
+}
+
 object Hand {
   def apply(first: Card, second: Card, third: Card, fourth: Card, fifth: Card): Hand = {
     // OR the suits together as we only care which suits are present, but not how many of each
