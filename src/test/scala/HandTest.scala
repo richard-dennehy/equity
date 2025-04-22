@@ -18,9 +18,12 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
   "hand7" should "have a vaguely sane representation" in {
     Hand7(As, Kd, Tc, Th, _7s, _6c, _6h).debugString7 shouldBe
       """
-        |_______|_1_|_2_|_3_|_4_|_5_|_6_|_7_|____Δ2-3____Δ4-5____Δ6-7____
-        |________hcdshcdshcdshcdshcdshcdshcdsΔ1-2____Δ3-4____Δ5-6____base
-        |0000000000010010010010000001010010000001001100000011000100000110""".stripMargin
+        |hcds|hcds|hcds|hcds|hcds|hcds|hcds|1111|2222|3333|4444|5555|6666|7777
+        |0001|0010|0100|1000|0001|0100|1000|1110|1101|1010|1010|0111|0110|0110""".stripMargin
+  }
+
+  it should "do stuff" in {
+    Hand7(As, Js, Ts, _7s, _5h, _3s, _2s).rank7
   }
 
   it should "compare hands properly" in {
