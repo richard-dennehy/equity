@@ -116,14 +116,16 @@ extension (h: Hand7) {
 
     while (flushSuit < 4 && !canFlush) {
       cardsWithFlushingSuit = h & flushMask
-      canFlush = bitCount(cardsWithFlushingSuit) >= 5
-      flushMask <<= 4
-      flushSuit += 1
+      if (bitCount(cardsWithFlushingSuit) >= 5) {
+        canFlush = true
+      } else {
+        flushMask <<= 1
+        flushSuit += 1
+      }
     }
 
-    cardsWithFlushingSuit = h & ((cardsWithFlushingSuit >> 28) * 15)
-
-    val ranks = h & ((1L << 28) - 1)
+    val flushingCardsMask = (cardsWithFlushingSuit >> (28 + flushSuit)) * 15
+    val cards = h & ((1L << 28) - 1)
 
     // If a flush is possible, the only other category worth looking for is a straight, as there aren't enough cards remaining
     //  to form a four of a kind or a full house, and trips/pairs are strictly worse
@@ -131,14 +133,14 @@ extension (h: Hand7) {
     // by shifting the ranks up by 4 (i.e. promoting each rank one level) and masking off the 1st card (which would otherwise subtract from the non-existent 0th card)
     //  then subtracting the above from the ranks, we get the deltas between each rank (except the 7th card)
     // we can then use this to check for straights and groups
-    val cardDeltas = ranks - ((ranks << 4) & ((1 << 28) - 1))
+    val cardDeltas = cards - ((cards << 4) & ((1 << 28) - 1))
 
     var straightMask = 0x1111000L
     var straightHighCard = -1L
 
     // optimisation (?) - if there aren't at least 4 bits set in the deltas, there can't be a straight, so don't bother looking for one
     if (bitCount(cardDeltas) >= 4) {
-      // 1-5 straight e.g. AKQJTXY
+      // position 1-5 straight e.g. AKQJTXY
       //
       // the bit patterns are somewhat complicated by the need to check that we have the right number of bits in the right places
       //  - if we just checked there were 4 bits set, something like KT777 would be considered a straight as there's a 3-delta
@@ -146,73 +148,87 @@ extension (h: Hand7) {
       //  AJ852 as a straight because the bottom bit would be set on each delta - we therefore need to check that there are exactly 4 bits
       //  set in the entire section, _and_ that those bits are in the right place
       if (bitCount(cardDeltas & 0xFFFF000) == 4 && bitCount(cardDeltas & straightMask) == 4) {
-        // TODO might have to check for flushes in all these branches, otherwise it's very difficult to identify the correct SF
-        //  as we could have e.g. AdKsQhJhTh9h8h, where the best straight is Ace high, but the best Straight Flush is Queen high
-        straightHighCard = (ranks & 0xF000000L) >> 24
+        straightHighCard = (cards & 0xF000000L) >> 24
 
         // mask together the 1-deltas with the flushing cards; if we get back the same 1-deltas, this straight is also a flush
-        if ((cardDeltas & straightMask & cardsWithFlushingSuit) == (cardDeltas & straightMask)) {
+        if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
           // we won't find anything better than this
           return StraightFlush.mask | straightHighCard
         }
       }
 
-      if (straightHighCard == -1) {
-        // 1-6 straight with a pair; AAKQJTX, AKKQJTX, etc
+      // from here, either:
+      //  - we haven't found a straight and should keep looking
+      //  - we have found a straight, but we also have a flush and should keep looking for straight flushes
+      //  - we have a straight and don't have a flush, and can effectively exit from this entire branch (my kingdom for a `continue`)
+      if (straightHighCard == -1 || canFlush) {
+        // position 1-6 straight with a pair; AAKQJTX, AKKQJTX, etc
         straightMask = 0x1111100L
         if (bitCount(cardDeltas & 0xFFFFF00) == 4 && bitCount(cardDeltas & straightMask) == 4) {
-          straightHighCard = (ranks & 0xF000000L) >> 24
+          straightHighCard = (cards & 0xF000000L) >> 24
 
-          if ((cardDeltas & straightMask & cardsWithFlushingSuit) == (cardDeltas & straightMask)) {
+          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
             return StraightFlush.mask | straightHighCard
           }
         }
       }
 
-      if (straightHighCard == -1) {
-        // 1-7 straight with two pairs or trips; AAAKQJT, AAKKQJT, etc
+      if (straightHighCard == -1 || canFlush) {
+        // position 1-7 straight with two pairs or trips; AAAKQJT, AAKKQJT, etc
         straightMask = 0x1111110L
         if (bitCount(cardDeltas & 0xFFFFFF0) == 4 && bitCount(cardDeltas & straightMask) == 4) {
-          straightHighCard = (ranks & 0xF000000L) >> 24
+          straightHighCard = (cards & 0xF000000L) >> 24
 
-          if ((cardDeltas & straightMask & cardsWithFlushingSuit) == (cardDeltas & straightMask)) {
+          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
             return StraightFlush.mask | straightHighCard
           }
         }
       }
 
-      if (straightHighCard == -1) {
+      if (straightHighCard == -1 || canFlush) {
         // 2-6 straight e.g. XQJT98Y
-        straightMask = 0x0111000L
-        if (bitCount(cardDeltas & 0x0FFFF00) == 4 && bitCount(cardDeltas & straightMask) == 4) {
-          straightHighCard = (ranks & 0x0F00000L) >> 20
-
-          if ((cardDeltas & straightMask & cardsWithFlushingSuit) == (cardDeltas & straightMask)) {
-            return StraightFlush.mask | straightHighCard
-          }
-        }
-      }
-
-      if (straightHighCard == -1) {
-        // 2-7 straight with a pair e.g. XQQJT98, XQJJT98, etc
         straightMask = 0x0111100L
-        if (bitCount(cardDeltas & 0x0FFFFF0) == 4 && bitCount(cardDeltas & straightMask) == 4) {
-          straightHighCard = (ranks & 0x0F00000L) >> 20
+        if (bitCount(cardDeltas & 0x0FFFF00) == 4 && bitCount(cardDeltas & straightMask) == 4) {
+          val highCard = (cards & 0x0F00000L) >> 20
+          // TODO some thought on trying to avoid all this extra branching - if we've already found a straight,
+          //  we can only be looking for a flush here - mask the deltas down to just the flushing cards, and if there's
+          //  a match we can immediately return SF, otherwise if we have a match, it must be because we haven't found a straight yet
+          if (straightHighCard == -1) {
+            straightHighCard = highCard
+          }
 
-          if ((cardDeltas & straightMask & cardsWithFlushingSuit) == (cardDeltas & straightMask)) {
-            return StraightFlush.mask | straightHighCard
+          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
+            return StraightFlush.mask | highCard
           }
         }
       }
 
-      if (straightHighCard == -1) {
+      if (straightHighCard == -1 || canFlush) {
+        // 2-7 straight with a pair e.g. XQQJT98, XQJJT98, etc
+        straightMask = 0x0111110L
+        if (bitCount(cardDeltas & 0x0FFFFF0) == 4 && bitCount(cardDeltas & straightMask) == 4) {
+          val highCard = (cards & 0x0F00000L) >> 20
+          if (straightHighCard == -1) {
+            straightHighCard = highCard
+          }
+
+          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
+            return StraightFlush.mask | highCard
+          }
+        }
+      }
+
+      if (straightHighCard == -1 || canFlush) {
         // 3-7 straight e.g. XYJT987
         straightMask = 0x0011110L
-        if (bitCount(cardDeltas & 0x00FFFFF) == 4 && bitCount(cardDeltas & straightMask) == 4) {
-          straightHighCard = (ranks & 0x00F0000L) >> 16
+        if (bitCount(cardDeltas & 0x00FFFF0) == 4 && bitCount(cardDeltas & straightMask) == 4) {
+          val highCard = (cards & 0x00F0000L) >> 16
+          if (straightHighCard == -1) {
+            straightHighCard = highCard
+          }
 
-          if ((cardDeltas & straightMask & cardsWithFlushingSuit) == (cardDeltas & straightMask)) {
-            return StraightFlush.mask | straightHighCard
+          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
+            return StraightFlush.mask | highCard
           }
         }
       }
@@ -222,41 +238,71 @@ extension (h: Hand7) {
     // we have a straight if straightHighCard is set
     // if straightHighCard is set or cardsWithFlushingSuit is set, we _cannot_ have a FourOfAKind or FullHouse
 
-    // TODO a flush takes priority over any straight so we can return if there's a flush, but we need to check for A-5 first
-    //  in case there's a SF hiding there
-    //  we _only_ care if there's an SF hiding there, so mask off the non-flushing cards before checking
-    //  Else (iff there's no flush), if there's a straight, return it because there aren't enough cards remaining to make anything
-    //  better
-    //  Else2, if there's no flush and no straight, check for A-5 using all cards
-    //  Or maybe check for groups at this point
-
-    // if we have any straight, it will be better than an Ace-to-Five straight, unless the A-5 is also a flush
-    if (straightHighCard != -1 && cardsWithFlushingSuit == 0) {
+    // if we have any straight, it will be better than an Ace-to-Five straight, unless the A-5 is also a flush, which it can't be if there's no flushing cards
+    if (straightHighCard != -1 && !canFlush) {
       return Straight.mask | straightHighCard
     }
 
+    // at this point, either:
+    //  - we've found a flush, but there's an Ace to 5 straight flush, so we need to check for that
+    //  - we've found a flush, and it's the best possible hand so we just return it
+    //  - we've found nothing so far - following category order, we should check for 4/kind and Full House before
+    //    looking for an A-5 straight, but we check for that here just to keep all the flush/straight code together
+    val maybeAceTo5Cards = if (canFlush) cards & flushingCardsMask else cards
+
     // check for A-5 straight - just look for the relevant cards in the hand
     // because the cards are sorted, if there are one or more Aces, there must be one in the highest position, and similarly for a 2 in the low position
-    if ((ranks >> 24) == Rank.Ace.value && (ranks & 0xFFF) == Rank.Two.value) {
+    if ((maybeAceTo5Cards >> 24) == Rank.Ace.value && (maybeAceTo5Cards & 0xF) == Rank.Two.value) {
       // given the cards must be at least AXYZUV2, the best case scenario is AXY5432, and the worst is something like A543222
       // we therefore need to loop over the cards in either direction (the choice doesn't seem to make a difference)
       // looking for the 3, 4, and 5
       var position = 6
-      var shift = 3
+      var shift = 4
       var needle = Rank.Three.value
 
+      // TODO micro-optimisation - if the 3 isn't found by position 4, there can't be A-5 - this doesn't really save anything though
       while (position > 1 && needle < 6) {
-        val rank = (ranks >> shift) & 0xFFF
+        val rank = (maybeAceTo5Cards >> shift) & 0xF
         if (rank == needle) needle += 1
 
-        shift += 3
+        shift += 4
         position -= 1
       }
 
       if (needle == Rank.Six.value) {
-        return Straight.mask | Rank.Five.value
+        if (canFlush)
+          return StraightFlush.mask | Rank.Five.value
+        else
+          return Straight.mask | Rank.Five.value
       }
     }
+
+    // at this point, if we have a flush, nothing will beat it, so return it
+    if (canFlush) {
+      // there's an issue at this point - we know which 5 cards have the same suit, but:
+      //  - we could have more than 5 cards with that suit
+      //  - if we don't, there will be gaps in the cards - this is an issue because it makes the ranking change depending on the order of the cards
+      // we therefore need to find the 5 highest ranked remaining cards and return those along with the category mask
+      val flushCards = h & flushingCardsMask
+      var rank = Flush.mask
+      var remaining = 5
+      var shift = 24
+      while (remaining > 0) {
+        val card = (flushCards >> shift) & 0xF
+        if (card != 0) {
+          rank |= card << ((remaining - 1) * 4)
+          remaining -= 1
+        }
+
+        shift -= 4
+      }
+      return rank
+    }
+
+    // at this point, we know there's no Straight Flush, Straight, or Flush, but we know basically nothing else
+
+    // TODO groups
+    //  is there a better way to do this other than shifting the ranks around and checking for 0s?
 
     //    println(cardsWithFlushingSuit.debugString7)
     println(cardDeltas.debugString7)

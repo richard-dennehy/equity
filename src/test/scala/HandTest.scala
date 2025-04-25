@@ -22,11 +22,42 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
         |0001|0010|0100|1000|0001|0100|1000|1110|1101|1010|1010|0111|0110|0110""".stripMargin
   }
 
-  it should "do stuff" in {
-    Hand7(As, Js, Ts, _7s, _5h, _3s, _2s).rank7
+  "rank7" should "recognise a flush" in {
+    val rank = Hand7(As, Js, Ts, _7s, _5h, _3s, _2s).rank7
+    rank shouldBe expected(Category.Flush, Rank.Ace, Rank.Jack, Rank.Ten, Rank.Seven, Rank.Three)
   }
 
-  it should "compare hands properly" in {
+  it should "rank a flush higher than a straight" in {
+    val rank = Hand7(As, Kd, Qc, Js, Ts, _3s, _2s).rank7
+    rank shouldBe expected(Category.Flush, Rank.Ace, Rank.Jack, Rank.Ten, Rank.Three, Rank.Two)
+  }
+
+  it should "recognise a straight" in {
+    val rank = Hand7(As, Kd, Qc, Js, Ts, _3d, _2h).rank7
+    rank shouldBe Category.Straight.mask | Rank.Ace.value
+  }
+
+  it should "recognise a straight flush" in {
+    val rank = Hand7(Ac, Kc, Qc, Jc, Tc, _3d, _2h).rank7
+    rank shouldBe Category.StraightFlush.mask | Rank.Ace.value
+  }
+
+  it should "recognise an Ace to Five straight" in {
+    val rank = Hand7(As, Td, Tc, _5d, _4c, _3s, _2s).rank7
+    rank shouldBe Category.Straight.mask | Rank.Five.value
+  }
+
+  it should "rank a SF with a lower high card higher than a straight with a higher high card" in {
+    val rank = Hand7(As, Kd, Qh, Jh, Th, _9h, _8h).rank7
+    rank shouldBe Category.StraightFlush.mask | Rank.Queen.value
+  }
+
+  it should "recognise an Ace to Five straight flush" in {
+    val rank = Hand7(Ad, Td, Tc, _5d, _4d, _3d, _2d).rank7
+    rank shouldBe Category.StraightFlush.mask | Rank.Five.value
+  }
+
+  "hand" should "compare hands properly" in {
     val bestTwoPair = Hand(
       card(Ace, Spades),
       card(Ace, Diamonds),
@@ -463,4 +494,7 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
   }
 
   private def kickerMask(kickers: Rank*): Long = kickers.map(1L << _.value - 2).sum
+
+  private def expected(category: Category, first: Rank, second: Rank, third: Rank, fourth: Rank, fifth: Rank): Long =
+    category.mask | (first.value << 16) | (second.value << 12) | (third.value << 8) | (fourth.value << 4) | fifth.value
 }
