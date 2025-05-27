@@ -303,6 +303,77 @@ extension (h: Hand7) {
 
     // TODO groups
     //  is there a better way to do this other than shifting the ranks around and checking for 0s?
+    // reminder: the final delta is irrelevant as it's the base card - only check the top 6 deltas
+    // a four of a kind is one of:
+    //  - xxx000y
+    //  - xx000yx
+    //  - x000yxx
+    //  - 000yxxx
+    //
+    // a three of a kind is one of:
+    //  - xxxx00
+    //  - xxx00x
+    //  - xx00xx
+    //  - x00xxx
+    //  - 00xxxx
+    //
+    // but there could also be a pair
+    //
+    // maybe: scan for zeros (3 bits at a time); count of these says which hands are possible, but not where
+    //
+    // loop once looking just for quads, as it simplifies the implementation of the following loop
+    // going L to R, 12 bits at a time:
+    //  if bitcount == 0, found quad:
+    //   kicker is highest card, except for first iteration, where it's card position 5
+    //  else continue
+
+    // scan for quads
+    var quadMask = 0xFFF0000L
+    var iteration = 0
+    while (iteration < 4) {
+      if (bitCount(cardDeltas & quadMask) == 0) {
+        val quad = ((cards & quadMask) >> (12 - iteration * 4)) & 0xF0L
+        // the kicker is just the highest ranked card, which is the first card, since they're sorted - unless that card
+        //  is part of the quad, in which case the kicker is the fifth card
+        val kicker = if (iteration == 0) {
+          (cards >> 8) & 0xF
+        } else {
+          cards >> 24
+        }
+        return Category.FourOfAKind.mask | quad | kicker
+      }
+
+      iteration += 1
+      quadMask >>= 4
+    }
+
+    // NOTE not necessary to track kickers as positions are implied by trip/pair positions
+    // basically looking for Full House here:
+    //  - return as soon as one is found
+    //  - otherwise, loop will either find a trip or one pair or nothing; might as well track the second pair as well
+    // going L to R, track trip, high pair, low pair:
+    //  if != 0:
+    //   continue
+    //  if 0 and previous not zero:
+    //   if trips set, return Full House of trips + high pair
+    //   if high pair == 0, high pair = 7 - iteration
+    //   elif low pair == 0, low pair = 7 - iteration
+    //   else ignore
+    //  if 0 and previous == 0
+    //   if previous is high pair
+    //    trip = high pair
+    //    high pair = 0
+    //   elif previous is low pair
+    //    return low pair as trips + high pair
+    // <loop end>
+    //
+    // if trips set, return trips + kickers
+    // if high pair set
+    //  if low pair set
+    //   return two pair + kicker
+    //  else
+    //   return high pair + kickers
+    // return High card of first 5 cards
 
     //    println(cardsWithFlushingSuit.debugString7)
     println(cardDeltas.debugString7)

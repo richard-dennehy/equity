@@ -57,6 +57,16 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
     rank shouldBe Category.StraightFlush.mask | Rank.Five.value
   }
 
+  it should "recognise a Four of a Kind where the kicker is lower ranked than the quad" in {
+    val rank = Hand7(_8s, _8d, _8c, _8h, _6s, _4d, _2h).rank7
+    rank shouldBe Category.FourOfAKind.mask | Rank.Eight.value << 4 | Rank.Six.value
+  }
+
+  it should "recognise a Four of a Kind where the kicker is higher ranked than the quad" in {
+    val rank = Hand7(Kd, Js, Jd, Jc, Jh, _4d, _2h).rank7
+    rank shouldBe Category.FourOfAKind.mask | Rank.Jack.value << 4 | Rank.King.value
+  }
+
   "hand" should "compare hands properly" in {
     val bestTwoPair = Hand(
       card(Ace, Spades),
