@@ -22,7 +22,7 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
         |0001|0010|0100|1000|0001|0100|1000|1110|1101|1010|1010|0111|0110|0110""".stripMargin
   }
 
-  "rank7" should "recognise a flush" in {
+  "rank7" should "correctly rank a flush" in {
     val rank = Hand7(As, Js, Ts, _7s, _5h, _3s, _2s).rank7
     rank shouldBe expected(Category.Flush, Rank.Ace, Rank.Jack, Rank.Ten, Rank.Seven, Rank.Three)
   }
@@ -32,17 +32,17 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
     rank shouldBe expected(Category.Flush, Rank.Ace, Rank.Jack, Rank.Ten, Rank.Three, Rank.Two)
   }
 
-  it should "recognise a straight" in {
+  it should "correctly rank a straight" in {
     val rank = Hand7(As, Kd, Qc, Js, Ts, _3d, _2h).rank7
     rank shouldBe Category.Straight.mask | Rank.Ace.value
   }
 
-  it should "recognise a straight flush" in {
+  it should "correctly rank a straight flush" in {
     val rank = Hand7(Ac, Kc, Qc, Jc, Tc, _3d, _2h).rank7
     rank shouldBe Category.StraightFlush.mask | Rank.Ace.value
   }
 
-  it should "recognise an Ace to Five straight" in {
+  it should "correctly rank an Ace to Five straight" in {
     val rank = Hand7(As, Td, Tc, _5d, _4c, _3s, _2s).rank7
     rank shouldBe Category.Straight.mask | Rank.Five.value
   }
@@ -52,19 +52,89 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
     rank shouldBe Category.StraightFlush.mask | Rank.Queen.value
   }
 
-  it should "recognise an Ace to Five straight flush" in {
+  it should "correctly rank an Ace to Five straight flush" in {
     val rank = Hand7(Ad, Td, Tc, _5d, _4d, _3d, _2d).rank7
     rank shouldBe Category.StraightFlush.mask | Rank.Five.value
   }
 
-  it should "recognise a Four of a Kind where the kicker is lower ranked than the quad" in {
+  it should "correctly rank a Four of a Kind where the kicker is lower ranked than the quad" in {
     val rank = Hand7(_8s, _8d, _8c, _8h, _6s, _4d, _2h).rank7
     rank shouldBe Category.FourOfAKind.mask | Rank.Eight.value << 4 | Rank.Six.value
   }
 
-  it should "recognise a Four of a Kind where the kicker is higher ranked than the quad" in {
+  it should "correctly rank a Four of a Kind where the kicker is higher ranked than the quad" in {
     val rank = Hand7(Kd, Js, Jd, Jc, Jh, _4d, _2h).rank7
     rank shouldBe Category.FourOfAKind.mask | Rank.Jack.value << 4 | Rank.King.value
+  }
+
+  it should "correctly rank a Full House where the trip is higher ranked than the pair" in {
+    val rank = Hand7(Kd, Kc, Kh, Jh, _6s, _6h, _5d).rank7
+    rank shouldBe Category.FullHouse.mask | Rank.King.value << 4 | Rank.Six.value
+  }
+
+  it should "correctly rank a Full House where the trip is lower ranked than the pair" in {
+    val rank = Hand7(Kd, Kc, Jh, _6s, _6c, _6h, _5d).rank7
+    rank shouldBe Category.FullHouse.mask | Rank.Six.value << 4 | Rank.King.value
+  }
+
+  it should "correctly rank a Full House in a set of 7 cards with one trip and two pairs" in {
+    val rank = Hand7(Kd, Kc, Jd, Jh, _6s, _6c, _6h).rank7
+    rank shouldBe Category.FullHouse.mask | Rank.Six.value << 4 | Rank.King.value
+  }
+
+  it should "correctly rank a Three of a Kind where the trip is the first three cards" in {
+    val rank = Hand7(Kd, Kc, Kh, Jh, _6s, _4s, _3d).rank7
+    rank shouldBe Category.ThreeOfAKind.mask | Rank.King.value << 8 | Rank.Jack.value << 4 | Rank.Six.value
+  }
+
+  it should "correctly rank a Three of a Kind where the trip is cards two to four" in {
+    val rank = Hand7(As, Kd, Kc, Kh, Jh, _6s, _4s).rank7
+    rank shouldBe Category.ThreeOfAKind.mask | Rank.King.value << 8 | Rank.Ace.value << 4 | Rank.Jack.value
+  }
+
+  it should "correctly rank a Three of a Kind where the trip is cards three to five" in {
+    val rank = Hand7(As, Kd, Td, Tc, Th, _6s, _4s).rank7
+    rank shouldBe Category.ThreeOfAKind.mask | Rank.Ten.value << 8 | Rank.Ace.value << 4 | Rank.King.value
+  }
+
+  it should "correctly rank a Two Pair where the kicker is higher ranked than the high pair" in {
+    val rank = Hand7(Ad, Jh, _9s, _6c, _6h, _2s, _2d).rank7
+    rank shouldBe Category.TwoPairs.mask | Rank.Six.value << 8 | Rank.Two.value << 4 | Rank.Ace.value
+  }
+
+  it should "correctly rank a Two Pair where the kicker is lower ranked than the low pair" in {
+    val rank = Hand7(Ad, Ac, _9s, _9c, _6s, _5h, _2d).rank7
+    rank shouldBe Category.TwoPairs.mask | Rank.Ace.value << 8 | Rank.Nine.value << 4 | Rank.Six.value
+  }
+
+  it should "correctly rank a Two Pair where the kicker is in between the pairs" in {
+    val rank = Hand7(Ad, Jh, _9s, _9c, _6h, _2s, _2d).rank7
+    rank shouldBe Category.TwoPairs.mask | Rank.Nine.value << 8 | Rank.Two.value << 4 | Rank.Ace.value
+  }
+
+  it should "correctly rank a pair in cards one and two" in {
+    val rank = Hand7(As, Ad, Ks, Jd, _8s, _6h, _5s).rank7
+    rank shouldBe Category.OnePair.mask | Rank.Ace.value << 12 | Rank.King.value << 8 | Rank.Jack.value << 4 | Rank.Eight.value
+  }
+
+  it should "correctly rank a pair in cards two and three" in {
+    val rank = Hand7(As, Ks, Kd, Jd, _8s, _6h, _5s).rank7
+    rank shouldBe Category.OnePair.mask | Rank.King.value << 12 | Rank.Ace.value << 8 | Rank.Jack.value << 4 | Rank.Eight.value
+  }
+
+  it should "correctly rank a pair in cards three and four" in {
+    val rank = Hand7(As, Ks, Jc, Jh, _8s, _6h, _5s).rank7
+    rank shouldBe Category.OnePair.mask | Rank.Jack.value << 12 | Rank.Ace.value << 8 | Rank.King.value << 4 | Rank.Eight.value
+  }
+
+  it should "correctly rank a pair in cards four and five" in {
+    val rank = Hand7(As, Ks, Jc, _8c, _8h, _6h, _5s).rank7
+    rank shouldBe Category.OnePair.mask | Rank.Eight.value << 12 | Rank.Ace.value << 8 | Rank.King.value << 4 | Rank.Jack.value
+  }
+
+  it should "correctly rank a high card hand" in {
+    val rank = Hand7(Ts, _9d, _8c, _7d, _5s, _3d, _2h).rank7
+    rank shouldBe expected(Category.HighCard, Rank.Ten, Rank.Nine, Rank.Eight, Rank.Seven, Rank.Five)
   }
 
   "hand" should "compare hands properly" in {

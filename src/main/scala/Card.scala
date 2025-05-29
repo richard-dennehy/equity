@@ -301,8 +301,6 @@ extension (h: Hand7) {
 
     // at this point, we know there's no Straight Flush, Straight, or Flush, but we know basically nothing else
 
-    // TODO groups
-    //  is there a better way to do this other than shifting the ranks around and checking for 0s?
     // reminder: the final delta is irrelevant as it's the base card - only check the top 6 deltas
     // a four of a kind is one of:
     //  - xxx000y
@@ -364,7 +362,7 @@ extension (h: Hand7) {
     //    trip = high pair
     //    high pair = 0
     //   elif previous is low pair
-    //    return low pair as trips + high pair
+    //    return Full House as low pair + high pair
     // <loop end>
     //
     // if trips set, return trips + kickers
@@ -374,11 +372,129 @@ extension (h: Hand7) {
     //  else
     //   return high pair + kickers
     // return High card of first 5 cards
+    var deltaMask = 0xF000000L
+    iteration = 0
+    var tripsIndex = -1
+    var highPairIndex = -1
+    var lowPairIndex = -1
+    // awkward edge case from 7 cards: KKJJQQQ - need to track all three pairs, as the third "pair" will turn out to be trips
+    var thirdPairIndex = -1
+    var previousZero = false
 
-    //    println(cardsWithFlushingSuit.debugString7)
-    println(cardDeltas.debugString7)
+    while (iteration < 6) {
+      if ((cardDeltas & deltaMask) == 0) {
+        if (previousZero) {
+          if (highPairIndex == iteration - 1) {
+            tripsIndex = highPairIndex
+            highPairIndex = -1
+          } else if (lowPairIndex == iteration - 1) {
+            // TODO this (or the below) is probably always true, if the loop is working properly
+            val tripsValue = (cards & deltaMask) >> (4 * (5 - iteration)) & 0xF0
+            val pairValue = (cards >> (4 * (6 - highPairIndex))) & 0xF
+            return FullHouse.mask | tripsValue | pairValue
+          } else if (thirdPairIndex == iteration - 1) {
+            // TODO consider if the above condition must always be true at this point
+            val tripsValue = (cards & deltaMask) >> (4 * (5 - iteration)) & 0xF0
+            val pairValue = (cards >> (4 * (6 - highPairIndex))) & 0xF
+            return FullHouse.mask | tripsValue | pairValue
+          } else {
+            throw new IllegalStateException("Either high pair or low pair should be set")
+          }
+        } else {
+          if (tripsIndex != -1) {
+            val tripsValue = (cards >> (4 * (5 - tripsIndex))) & 0xF0
+            val pairValue = (cards & deltaMask) >> (4 * (6 - iteration)) & 0xF
+            return FullHouse.mask | tripsValue | pairValue
+          } else if (highPairIndex == -1) {
+            highPairIndex = iteration
+          } else if (lowPairIndex == -1) {
+            lowPairIndex = iteration
+          } else {
+            thirdPairIndex = iteration
+          }
+        }
 
-    ???
+        previousZero = true
+      } else {
+        previousZero = false
+      }
+
+      deltaMask >>= 4
+      iteration += 1
+    }
+
+    // at this point, we have one of the following (and enough information to work out which one):
+    //  - Three of a Kind
+    //  - Two Pair
+    //  - One Pair
+    //  - High Card
+    if (tripsIndex != -1) {
+      val tripsValue = ((cards >> (4 * (6 - tripsIndex))) & 0xF) << 8
+      // given the kickers are the highest valued cards excluding the trips, those cards are either
+      //  - the first two cards when the trips start from the third card or below
+      //  - the first card and the fifth card when the trips start from the second card
+      //  - the fourth card and the fifth card when the trips start from the first card
+      if (tripsIndex >= 2) {
+        val kickers = cards >> 20
+        return ThreeOfAKind.mask | tripsValue | kickers
+      } else if (tripsIndex == 1) {
+        val highKicker = (cards >> 20) & 0xF0
+        val lowKicker = (cards >> 8) & 0xF
+        return ThreeOfAKind.mask | tripsValue | highKicker | lowKicker
+      } else {
+        val kickers = (cards >> 8) & 0xFF
+        return ThreeOfAKind.mask | tripsValue | kickers
+      }
+    }
+
+    if (lowPairIndex != -1) {
+      // the kicker here is either:
+      //  - the first card iff it's not in the high pair
+      //  - else the third card iff it's not in the low pair
+      //  - else the fifth card
+      val lowPairValue = ((cards >> (4 * (6 - lowPairIndex))) & 0xF) << 4
+      val highPairValue = ((cards >> (4 * (6 - highPairIndex))) & 0xF) << 8
+
+      if (highPairIndex != 0) {
+        val kicker = cards >> 24
+        return TwoPairs.mask | highPairValue | lowPairValue | kicker
+      } else if (lowPairIndex != 2) {
+        val kicker = (cards >> 16) & 0xF
+        return TwoPairs.mask | highPairValue | lowPairValue | kicker
+      } else {
+        val kicker = (cards >> 8) & 0xF
+        return TwoPairs.mask | highPairValue | lowPairValue | kicker
+      }
+    }
+
+    if (highPairIndex != -1) {
+      // need three kickers; either:
+      //  - the first three cards if the pair is in card 4 or later
+      //  - the first two cards and the fifth card if 3/4 are the pair
+      //  - the first card and the fourth and fifth cards if 2/3 are the pair
+      //  - cards three to five if card 1/2 are the pair
+      val highPairValue = ((cards >> (4 * (6 - highPairIndex))) & 0xF) << 12
+
+      if (highPairIndex == 0) {
+        val kickers = (cards >> 8) & 0xFFF
+        return OnePair.mask | highPairValue | kickers
+      } else if (highPairIndex == 1) {
+        val highKicker = (cards >> 16) & 0xF00
+        val restKickers = (cards >> 8) & 0xFF
+        return OnePair.mask | highPairValue | highKicker | restKickers
+      } else if (highPairIndex == 2) {
+        val highKickers = (cards >> 16) & 0xFF0
+        val lowKicker = (cards >> 8) & 0xF
+        return OnePair.mask | highPairValue | highKickers | lowKicker
+      } else {
+        val kickers = (cards >> 16) & 0xFFF
+        return OnePair.mask | highPairValue | kickers
+      }
+    }
+
+    // No categories found; return High Card - this is trivial because the cards are already sorted, we just need to throw
+    //  out the lowest 2
+    HighCard.mask | (cards >> 8)
   }
 }
 
