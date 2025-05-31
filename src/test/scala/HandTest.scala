@@ -137,6 +137,14 @@ class HandTest extends AnyFlatSpec with Matchers with AppendedClues {
     rank shouldBe expected(Category.HighCard, Rank.Ten, Rank.Nine, Rank.Eight, Rank.Seven, Rank.Five)
   }
 
+  it should "something" in {
+    val rank1 = Hand7(Ad, _7d, _6d, _5d, _4d, _3s, _2s).rank7
+    val rank2 = Hand7(Ad, Kh, Tc, _7d, _6d, _5d, _4d).rank7
+
+    rank1 shouldBe expected(Category.Flush, Ace, Seven, Six, Five, Four)
+    rank2 shouldBe expected(Category.Flush, Ace, Seven, Six, Five, Four)
+  }
+
   "hand" should "compare hands properly" in {
     val bestTwoPair = Hand(
       card(Ace, Spades),

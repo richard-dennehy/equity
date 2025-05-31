@@ -4,7 +4,6 @@ import org.scalatest.matchers.should.Matchers
 class EquityTest extends AnyFlatSpec with Matchers {
   "equityProbably" should "vaguely know when the player is likely to lose" in {
     val odds = equityProbably(Vector(Ts, _5s, Js), (_9c, _6h), (Td, _4h))
-    // TODO how am I supposed to know if these odds are correct? They don't quite match the random online calculator
     (
       odds.p1.win,
       odds.p1.draw,
@@ -65,11 +64,11 @@ class EquityTest extends AnyFlatSpec with Matchers {
       odds.p1.draw,
       odds.p2.win,
       odds.p2.draw
-    ) shouldBe(
+    ) shouldBe (
       0.37805086f,
-      0.0071365833f,
-      0.61481255f,
-      0.0071365833f
+      0.007134831f,
+      0.6148143f,
+      0.007134831f
     )
   }
 

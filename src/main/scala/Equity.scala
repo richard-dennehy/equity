@@ -8,8 +8,10 @@ def equityProbably(community: Vector[Card], p1: (Card, Card), p2: (Card, Card)):
   )
 
   inline def updateOutcome(communityCards: Vector[Card]) = {
-    val p1Best = bestHand(communityCards, p1)
-    val p2Best = bestHand(communityCards, p2)
+    val p1Cards = (communityCards :+ p1._1 :+ p1._2).sortWith { _.rank.value > _.rank.value }
+    val p2Cards = (communityCards :+ p2._1 :+ p2._2).sortWith { _.rank.value > _.rank.value }
+    val p1Best = Hand7(p1Cards(0), p1Cards(1), p1Cards(2), p1Cards(3), p1Cards(4), p1Cards(5), p1Cards(6)).rank7
+    val p2Best = Hand7(p2Cards(0), p2Cards(1), p2Cards(2), p2Cards(3), p2Cards(4), p2Cards(5), p2Cards(6)).rank7
 
     if (p1Best > p2Best) {
       outcome.p1.win += 1
@@ -162,9 +164,6 @@ inline def drawProbability(card: Card, drawn: Vector[Card]): Float = {
   if (drawn.contains(card)) 0 else 1 / deckSize
 }
 
-// FIXME this function appears to be astoundingly slow
-//  I haven't bothered measuring properly, but anecdotally, the runtime of the "empty community hand" test goes from ~200ms to ~2s when this function is introduced
-//
 // Given 5 community cards and a pair of hole cards, returns the best possible hand of 5 cards. This hand doesn't necessarily contain either hole card.
 def bestHand(communityCards: Vector[Card], holeCards: (Card, Card)): RankedHand = {
   var best = Hand(communityCards(0), communityCards(1), communityCards(2), communityCards(3), communityCards(4)).rank

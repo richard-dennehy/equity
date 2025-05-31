@@ -112,11 +112,11 @@ extension (h: Hand7) {
     var flushMask = 0x1111111L << 28
     var canFlush = false
     var flushSuit = 0
-    var cardsWithFlushingSuit = 0L
+    var flushingSuits = 0L
 
     while (flushSuit < 4 && !canFlush) {
-      cardsWithFlushingSuit = h & flushMask
-      if (bitCount(cardsWithFlushingSuit) >= 5) {
+      flushingSuits = h & flushMask
+      if (bitCount(flushingSuits) >= 5) {
         canFlush = true
       } else {
         flushMask <<= 1
@@ -124,7 +124,7 @@ extension (h: Hand7) {
       }
     }
 
-    val flushingCardsMask = (cardsWithFlushingSuit >> (28 + flushSuit)) * 15
+    val flushingCardsMask = (flushingSuits >> (28 + flushSuit)) * 15
     val cards = h & ((1L << 28) - 1)
 
     // If a flush is possible, the only other category worth looking for is a straight, as there aren't enough cards remaining
@@ -147,11 +147,12 @@ extension (h: Hand7) {
       //  followed by another 3-delta, which would add up to 4 bits; if we just checked the 4 specific bits were set, it would allow
       //  AJ852 as a straight because the bottom bit would be set on each delta - we therefore need to check that there are exactly 4 bits
       //  set in the entire section, _and_ that those bits are in the right place
+      // TODO can probably merge the two bitcounts into one
       if (bitCount(cardDeltas & 0xFFFF000) == 4 && bitCount(cardDeltas & straightMask) == 4) {
         straightHighCard = (cards & 0xF000000L) >> 24
 
-        // mask together the 1-deltas with the flushing cards; if we get back the same 1-deltas, this straight is also a flush
-        if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
+        // take the straight mask, plus a mask for the fifth card, and combine it with the flushing suits to check if this straight is a flush
+        if (bitCount(flushingSuits & (0xFFFFF00L << 28)) == 5) {
           // we won't find anything better than this
           return StraightFlush.mask | straightHighCard
         }
@@ -167,7 +168,7 @@ extension (h: Hand7) {
         if (bitCount(cardDeltas & 0xFFFFF00) == 4 && bitCount(cardDeltas & straightMask) == 4) {
           straightHighCard = (cards & 0xF000000L) >> 24
 
-          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
+          if (bitCount(flushingSuits & (0xFFFFFF0L << 28)) == 5) {
             return StraightFlush.mask | straightHighCard
           }
         }
@@ -179,7 +180,7 @@ extension (h: Hand7) {
         if (bitCount(cardDeltas & 0xFFFFFF0) == 4 && bitCount(cardDeltas & straightMask) == 4) {
           straightHighCard = (cards & 0xF000000L) >> 24
 
-          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
+          if (bitCount(flushingSuits) == 5) {
             return StraightFlush.mask | straightHighCard
           }
         }
@@ -197,7 +198,7 @@ extension (h: Hand7) {
             straightHighCard = highCard
           }
 
-          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
+          if (bitCount(flushingSuits & (0x0FFFFF0L << 28)) == 5) {
             return StraightFlush.mask | highCard
           }
         }
@@ -212,7 +213,7 @@ extension (h: Hand7) {
             straightHighCard = highCard
           }
 
-          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
+          if (bitCount(flushingSuits & (0x0FFFFFFL << 28)) == 5) {
             return StraightFlush.mask | highCard
           }
         }
@@ -227,7 +228,7 @@ extension (h: Hand7) {
             straightHighCard = highCard
           }
 
-          if ((cardDeltas & straightMask & flushingCardsMask) == (cardDeltas & straightMask)) {
+          if (bitCount(flushingSuits & (0x00FFFFFL << 28)) == 5) {
             return StraightFlush.mask | highCard
           }
         }
@@ -297,6 +298,10 @@ extension (h: Hand7) {
         shift -= 4
       }
       return rank
+    }
+
+    if (straightHighCard != -1) {
+      return Straight.mask | straightHighCard
     }
 
     // at this point, we know there's no Straight Flush, Straight, or Flush, but we know basically nothing else
